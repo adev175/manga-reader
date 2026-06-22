@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Ảnh manga (quá lớn cho git thường — dùng LFS hoặc bỏ vào .gitignore nếu self-host)
+# Bỏ comment dòng dưới nếu KHÔNG muốn commit ảnh lên GitHub:
+# docs/chapters/
+
+# OS
+.DS_Store
+Thumbs.db

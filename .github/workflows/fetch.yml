@@ -1,0 +1,72 @@
+name: Fetch Manga Chapters
+
+on:
+  workflow_dispatch:
+    inputs:
+      manga_id:
+        description: 'MangaDex Manga ID hoặc URL'
+        required: true
+        default: 'c4b36f15-4ee5-425f-a77d-c2e7cbb970d8'
+      lang:
+        description: 'Ngôn ngữ (vi, en, ja, ...)'
+        required: true
+        default: 'vi'
+      start_chapter:
+        description: 'Chapter bắt đầu (để trống = tất cả)'
+        required: false
+        default: '40'
+      end_chapter:
+        description: 'Chapter kết thúc (để trống = đến cuối)'
+        required: false
+        default: '40'
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests tqdm
+
+      - name: Download chapters
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.start_chapter }}" ]; then
+            ARGS="$ARGS --start ${{ github.event.inputs.start_chapter }}"
+          fi
+          if [ -n "${{ github.event.inputs.end_chapter }}" ]; then
+            ARGS="$ARGS --end ${{ github.event.inputs.end_chapter }}"
+          fi
+
+          python scripts/download.py \
+            "${{ github.event.inputs.manga_id }}" \
+            --lang "${{ github.event.inputs.lang }}" \
+            --out docs/chapters \
+            $ARGS
+
+      - name: Update manifest.json
+        run: |
+          python scripts/generate_manifest.py \
+            --docs docs \
+            --title "Nippon Sangoku"
+
+      - name: Commit and push chapters
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/chapters/ docs/manifest.json
+          git diff --staged --quiet && echo "Nothing to commit" || \
+            git commit -m "chore: add chapters (lang=${{ github.event.inputs.lang }}, ch=${{ github.event.inputs.start_chapter }}-${{ github.event.inputs.end_chapter }})"
+          git push
