@@ -188,8 +188,14 @@ footer.hidden{transform:translateY(100%)}
 
   <!-- Search / Add manga view -->
   <div id="search-view">
+    <div style="padding:10px 16px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--muted);white-space:nowrap">GH Token</span>
+        <input id="gh-token-input" type="password" placeholder="ghp_xxxx…" autocomplete="off" style="font-size:12px;padding:4px 8px">
+      </div>
+    </div>
     <div class="search-wrap">
-      <input id="search-input" placeholder="Tìm tên truyện..." autocomplete="off">
+      <input id="search-input" placeholder="Tìm tên truyện…" autocomplete="off">
       <button id="btn-search">Tìm</button>
     </div>
     <div id="search-results">
@@ -211,11 +217,6 @@ footer.hidden{transform:translateY(100%)}
           <div class="field"><label>Từ</label><input id="fetch-start" type="number" min="1" placeholder="1"></div>
           <div class="field"><label>Đến</label><input id="fetch-end" type="number" min="1" placeholder="(cuối)"></div>
         </div>
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">GITHUB TOKEN (để trigger Actions)</label>
-        <input id="gh-token-input" type="password" placeholder="ghp_xxxx..." autocomplete="off">
-        <div style="font-size:10px;color:var(--muted);margin-top:4px">Token lưu trong sessionStorage, không gửi đi đâu ngoài GitHub API</div>
       </div>
       <button id="btn-do-fetch">🚀 Fetch & Deploy</button>
       <div id="fetch-status-wrap">
@@ -510,177 +511,177 @@ function buildChList() {
 }
 
 // ══════════════════════════════════════════════════════════
-// ── SEARCH / ADD MANGA ────────────────────────────────────
+// ── SEARCH / ADD MANGA (via GitHub Actions proxy) ─────────
 // ══════════════════════════════════════════════════════════
 
-// ── MangaDex API helpers ──────────────────────────────────
-async function mdexGet(path, params = {}) {
-  const url = new URL(MDEX + path);
-  Object.entries(params).forEach(([k, v]) => {
-    if (Array.isArray(v)) v.forEach(x => url.searchParams.append(k, x));
-    else url.searchParams.set(k, v);
+const LANG_NAMES = { vi:'🇻🇳 Tiếng Việt', en:'🇺🇸 English', ja:'🇯🇵 Japanese','ja-ro':'🇯🇵 Romaji', zh:'🇨🇳 中文', ko:'🇰🇷 한국어', fr:'🇫🇷 French', es:'🇪🇸 Spanish', pt:'🇧🇷 Portuguese', id:'🇮🇩 Indonesian', th:'🇹🇭 Thai' };
+const getLangName = c => LANG_NAMES[c] || c.toUpperCase();
+const coverUrl = (id, f) => `https://uploads.mangadex.org/covers/${id}/${f}.256.jpg`;
+
+// ── GitHub API helper ─────────────────────────────────────
+function getToken() { return $('gh-token-input').value.trim() || sessionStorage.getItem('gh_token') || ''; }
+
+async function ghApi(token, method, path, body) {
+  const r = await fetch(`https://api.github.com${path}`, {
+    method,
+    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
   });
-  const r = await fetch(url.toString(), { headers: { 'User-Agent': 'MangaPWA/1.0' } });
-  if (!r.ok) throw new Error(`MangaDex API ${r.status}: ${path}`);
+  if (method === 'POST' && r.status === 204) return null;
+  if (!r.ok) { const t = await r.text(); throw new Error(`GitHub ${r.status}: ${t.slice(0,200)}`); }
   return r.json();
 }
 
-function coverUrl(mangaId, fileName, size = 256) {
-  return `https://uploads.mangadex.org/covers/${mangaId}/${fileName}.${size}.jpg`;
+// Poll a workflow run until completed, calling onProgress(pct, msg) periodically
+async function pollRun(token, runId, fromPct, toPct, onProgress) {
+  let pct = fromPct;
+  while (true) {
+    await new Promise(r => setTimeout(r, 7000));
+    const run = await ghApi(token, 'GET', `/repos/${GH_REPO}/actions/runs/${runId}`);
+    pct = Math.min(pct + 4, toPct - 2);
+    onProgress(pct, `${run.name}: ${run.status}…`);
+    if (run.status === 'completed') {
+      if (run.conclusion !== 'success') throw new Error(`${run.name} thất bại (${run.conclusion}). <a href="${run.html_url}" target="_blank">Xem log</a>`);
+      onProgress(toPct, `✅ ${run.name} hoàn tất`);
+      return run;
+    }
+  }
 }
 
-function getLangName(code) {
-  const map = { vi: '🇻🇳 Tiếng Việt', en: '🇺🇸 English', ja: '🇯🇵 Japanese', 'ja-ro': '🇯🇵 Romaji', zh: '🇨🇳 中文', ko: '🇰🇷 한국어', fr: '🇫🇷 French', es: '🇪🇸 Spanish', pt: '🇧🇷 Portuguese', id: '🇮🇩 Indonesian', th: '🇹🇭 Thai' };
-  return map[code] || code.toUpperCase();
+// Find freshest queued/in_progress run for a workflow, retrying for up to 40s
+async function waitForNewRun(token, workflowName, afterTime) {
+  for (let i = 0; i < 14; i++) {
+    await new Promise(r => setTimeout(r, 4000));
+    const data = await ghApi(token, 'GET', `/repos/${GH_REPO}/actions/runs?per_page=10`);
+    const run = data.workflow_runs?.find(r =>
+      r.name === workflowName &&
+      (r.status === 'queued' || r.status === 'in_progress') &&
+      new Date(r.created_at) >= new Date(afterTime - 5000)
+    );
+    if (run) return run;
+  }
+  throw new Error(`Không tìm thấy run "${workflowName}". Kiểm tra GitHub Actions.`);
 }
 
-async function searchManga(query) {
-  const data = await mdexGet('/manga', {
-    title: query, limit: 10,
-    'includes[]': ['cover_art'],
-    'order[relevance]': 'desc',
-  });
-  return data.data || [];
+// ── Search via search.yml ─────────────────────────────────
+function setSearchStatus(msg, loading = false) {
+  $('search-results').innerHTML = `<div style="color:var(--muted);text-align:center;margin-top:32px;font-size:13px;display:flex;flex-direction:column;align-items:center;gap:10px">${loading ? '<div class="spinner"></div>' : ''}${msg}</div>`;
 }
 
-async function getMangaLangs(mangaId) {
-  // Get available translated languages + chapter counts
-  const data = await mdexGet(`/manga/${mangaId}/aggregate`);
-  const volumes = data.volumes || {};
-  const langCounts = {};
-  // aggregate doesn't return lang info by itself; do a quick feed check
-  return null; // will use /manga/feed approach below
+async function doSearch() {
+  const q = $('search-input').value.trim();
+  if (!q) return;
+  const token = getToken();
+  if (!token) { alert('Cần nhập GitHub Token (nhấn vào ô token bên dưới) để search qua Actions.'); return; }
+  sessionStorage.setItem('gh_token', token);
+
+  $('btn-search').disabled = true;
+  $('btn-search').textContent = '⏳';
+  $('fetch-config').classList.remove('show');
+  setSearchStatus(`Đang tìm "${q}" qua GitHub Actions…`, true);
+
+  try {
+    const triggerTime = Date.now();
+    await ghApi(token, 'POST', `/repos/${GH_REPO}/actions/workflows/search.yml/dispatches`, {
+      ref: 'main', inputs: { query: q }
+    });
+
+    setSearchStatus('Đã trigger search, đang chờ Actions chạy… (~15-25s)', true);
+    const run = await waitForNewRun(token, 'Search Manga', triggerTime);
+    setSearchStatus(`Run #${run.id} đang chạy…`, true);
+    await pollRun(token, run.id, 10, 90, (pct, msg) => setSearchStatus(msg + ` (${pct}%)`, true));
+
+    // Fetch result file (bust cache)
+    setSearchStatus('Đang tải kết quả…', true);
+    const res = await fetch(`./search_result.json?t=${Date.now()}`);
+    if (!res.ok) throw new Error('Không đọc được search_result.json');
+    const data = await res.json();
+
+    if (!data.results?.length) { setSearchStatus('Không tìm thấy truyện nào.'); return; }
+    state.searchResults = data.results;
+    renderSearchResults(data.results);
+  } catch(e) {
+    setSearchStatus('❌ ' + e.message);
+  } finally {
+    $('btn-search').disabled = false;
+    $('btn-search').textContent = 'Tìm';
+  }
 }
 
-async function getMangaFeedLangs(mangaId) {
-  // Get unique languages available + chapter count per lang
-  const data = await mdexGet(`/manga/${mangaId}/feed`, {
-    limit: 1, 'order[chapter]': 'asc',
-    'includes[]': [],
-  });
-  // Use aggregate endpoint for per-lang counts
-  const aggData = await mdexGet(`/manga/${mangaId}/aggregate`);
-  // Fetch available langs via a 500-limit call
-  const feedAll = await mdexGet(`/manga/${mangaId}/feed`, { limit: 500, 'order[chapter]': 'asc', 'includes[]': [] });
-  const langMap = {};
-  (feedAll.data || []).forEach(ch => {
-    const lang = ch.attributes.translatedLanguage;
-    if (!langMap[lang]) langMap[lang] = new Set();
-    langMap[lang].add(ch.attributes.chapter);
-  });
-  return Object.fromEntries(Object.entries(langMap).map(([k, v]) => [k, v.size]));
-}
-
-// ── Render search results ─────────────────────────────────
-function renderSearchResults(mangas) {
+// ── Render results ────────────────────────────────────────
+function renderSearchResults(results) {
   const container = $('search-results');
-  if (!mangas.length) { container.innerHTML = '<div style="color:var(--muted);text-align:center;margin-top:32px;font-size:13px">Không tìm thấy truyện nào</div>'; return; }
-
-  container.innerHTML = mangas.map((m, i) => {
-    const attr = m.attributes;
-    const title = attr.title?.en || attr.title?.ja || Object.values(attr.title||{})[0] || 'Unknown';
-    const desc = (attr.description?.vi || attr.description?.en || '').slice(0, 80).replace(/<[^>]+>/g, '');
-    const status = attr.status || '';
-    const coverRel = m.relationships?.find(r => r.type === 'cover_art');
-    const coverFile = coverRel?.attributes?.fileName;
-    const thumb = coverFile ? coverUrl(m.id, coverFile, 256) : '';
-    const year = attr.year ? ` · ${attr.year}` : '';
-    return `<div class="manga-card" data-idx="${i}" data-id="${m.id}">
+  container.innerHTML = results.map((m, i) => {
+    const thumb = m.cover ? coverUrl(m.id, m.cover) : '';
+    const status = m.status || '';
+    const statusLabel = status === 'ongoing' ? '🟢 Đang ra' : status === 'completed' ? '✅ Hoàn thành' : status;
+    const year = m.year ? ` · ${m.year}` : '';
+    const langs = Object.keys(m.langs || {}).map(l => getLangName(l).split(' ')[0]).join(' ');
+    return `<div class="manga-card" data-idx="${i}">
       ${thumb ? `<img class="manga-thumb" src="${thumb}" alt="" loading="lazy" onerror="this.style.display='none'">` : '<div class="manga-thumb"></div>'}
       <div class="manga-info">
-        <div class="manga-title">${title}</div>
-        <div class="manga-meta">${status}${year}</div>
-        ${desc ? `<div class="manga-meta" style="margin-top:2px;line-height:1.4">${desc}...</div>` : ''}
-        <div class="manga-tags">
-          <span class="manga-tag status-${status}">${status === 'ongoing' ? '🟢 Đang ra' : status === 'completed' ? '✅ Hoàn thành' : status}</span>
+        <div class="manga-title">${m.title_vi || m.title}</div>
+        ${m.title_vi && m.title !== m.title_vi ? `<div class="manga-meta" style="font-style:italic">${m.title}</div>` : ''}
+        <div class="manga-meta">${statusLabel}${year}${m.author ? ' · ' + m.author : ''}</div>
+        ${m.desc ? `<div class="manga-meta" style="margin-top:3px;line-height:1.4;opacity:.8">${m.desc.slice(0,100)}…</div>` : ''}
+        <div class="manga-tags" style="margin-top:4px">
+          ${langs ? `<span class="manga-tag">${langs}</span>` : ''}
+          ${m.tags?.slice(0,3).map(t => `<span class="manga-tag">${t}</span>`).join('') || ''}
         </div>
       </div>
     </div>`;
   }).join('');
 
   container.querySelectorAll('.manga-card').forEach(card => {
-    card.addEventListener('click', () => selectManga(mangas[parseInt(card.dataset.idx)], card));
+    card.addEventListener('click', () => selectManga(state.searchResults[+card.dataset.idx], card));
   });
 }
 
-async function selectManga(manga, cardEl) {
-  // Highlight
+// ── Select manga → show fetch config ─────────────────────
+function selectManga(manga, cardEl) {
   document.querySelectorAll('.manga-card').forEach(c => c.classList.remove('selected'));
   cardEl.classList.add('selected');
-
   state.selectedManga = manga;
-  const attr = manga.attributes;
-  const title = attr.title?.en || attr.title?.ja || Object.values(attr.title||{})[0] || 'Unknown';
+
+  const langs = manga.langs || {};
+  const langKeys = Object.keys(langs);
+  const preferred = ['vi','en',...langKeys].find(l => langs[l]) || langKeys[0] || 'en';
+  state.selectedLang = preferred;
+
+  $('fetch-manga-title').textContent = manga.title_vi || manga.title;
+  $('fetch-manga-meta').textContent = `${langKeys.length} ngôn ngữ · ${manga.status}`;
+  $('ch-count-badge').textContent = langs[preferred] ? `— ${langs[preferred]} chapters` : '';
+
+  $('lang-chips').innerHTML = langKeys.map(l =>
+    `<span class="lang-chip${l === preferred ? ' active' : ''}" data-lang="${l}">${getLangName(l)} <span style="color:var(--muted);font-size:10px">(${langs[l]}ch)</span></span>`
+  ).join('');
+  $('lang-chips').querySelectorAll('.lang-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.lang-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.selectedLang = chip.dataset.lang;
+      $('ch-count-badge').textContent = `— ${langs[state.selectedLang]||0} chapters`;
+    });
+  });
+
+  const savedToken = sessionStorage.getItem('gh_token') || '';
+  if (savedToken && !$('gh-token-input').value) $('gh-token-input').value = savedToken;
+  $('btn-do-fetch').disabled = false;
 
   const fc = $('fetch-config');
   fc.classList.add('show');
-  $('fetch-manga-title').textContent = title;
-  $('fetch-manga-meta').textContent = 'Đang tải danh sách ngôn ngữ...';
-  $('lang-chips').innerHTML = '';
-  $('ch-count-badge').textContent = '';
-  $('btn-do-fetch').disabled = true;
-
-  // Scroll config into view
-  fc.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  try {
-    const langCounts = await getMangaFeedLangs(manga.id);
-    state.selectedMangaLangs = Object.keys(langCounts);
-    state.selectedMangaChCount = langCounts;
-
-    $('fetch-manga-meta').textContent = `${state.selectedMangaLangs.length} ngôn ngữ có sẵn`;
-
-    // Prefer vi > en > first
-    const preferred = ['vi', 'en', ...state.selectedMangaLangs].find(l => langCounts[l]) || state.selectedMangaLangs[0];
-    state.selectedLang = preferred;
-
-    $('lang-chips').innerHTML = state.selectedMangaLangs.map(lang =>
-      `<span class="lang-chip${lang === preferred ? ' active' : ''}" data-lang="${lang}">${getLangName(lang)} <span style="color:var(--muted);font-size:10px">(${langCounts[lang]}ch)</span></span>`
-    ).join('');
-
-    $('lang-chips').querySelectorAll('.lang-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        document.querySelectorAll('.lang-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        state.selectedLang = chip.dataset.lang;
-        $('ch-count-badge').textContent = `— ${langCounts[state.selectedLang] || 0} chapters`;
-      });
-    });
-
-    $('ch-count-badge').textContent = `— ${langCounts[preferred] || 0} chapters`;
-    $('btn-do-fetch').disabled = false;
-
-    // Pre-fill saved token
-    const savedToken = sessionStorage.getItem('gh_token') || '';
-    if (savedToken) $('gh-token-input').value = savedToken;
-
-  } catch(e) {
-    $('fetch-manga-meta').textContent = '❌ Không lấy được thông tin: ' + e.message;
-  }
+  setTimeout(() => fc.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
 }
 
-// ── Trigger GitHub Actions ────────────────────────────────
-async function ghApi(token, method, path, body) {
-  const r = await fetch(`https://api.github.com${path}`, {
-    method, headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/vnd.github+json',
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (method === 'POST' && r.status === 204) return null;
-  if (!r.ok) { const t = await r.text(); throw new Error(`GitHub API ${r.status}: ${t}`); }
-  return r.json();
-}
-
+// ── Progress helpers ──────────────────────────────────────
 function setFetchProgress(pct, text, log) {
-  const wrap = $('fetch-status-wrap'); wrap.classList.add('show');
+  $('fetch-status-wrap').classList.add('show');
   $('fetch-bar-fill').style.width = pct + '%';
   $('fetch-status-text').textContent = text;
-  if (log) { const el = $('fetch-log'); el.textContent += log + '\n'; el.scrollTop = el.scrollHeight; }
+  if (log !== undefined) { const el = $('fetch-log'); el.innerHTML += log + '\n'; el.scrollTop = el.scrollHeight; }
 }
 
+// ── Fetch & Deploy ────────────────────────────────────────
 async function doFetch() {
   const manga = state.selectedManga;
   if (!manga) return;
@@ -691,78 +692,36 @@ async function doFetch() {
   const lang = state.selectedLang;
   const start = $('fetch-start').value.trim() || '';
   const end = $('fetch-end').value.trim() || '';
-  const attr = manga.attributes;
-  const title = attr.title?.vi || attr.title?.en || attr.title?.ja || Object.values(attr.title||{})[0] || 'Manga';
+  const title = manga.title_vi || manga.title || 'Manga';
 
   $('btn-do-fetch').disabled = true;
   $('fetch-log').textContent = '';
-  setFetchProgress(5, '🚀 Đang trigger GitHub Actions...', `Manga: ${title} [${manga.id}]`);
-  setFetchProgress(5, '', `Ngôn ngữ: ${lang}, Ch: ${start||'1'} → ${end||'cuối'}`);
+  setFetchProgress(2, '🚀 Trigger fetch.yml…', `📖 ${title} [${manga.id}]\n🌐 Lang: ${lang} | Ch: ${start||'1'} → ${end||'cuối'}`);
 
   try {
-    // Trigger fetch workflow
+    const t0 = Date.now();
     await ghApi(token, 'POST', `/repos/${GH_REPO}/actions/workflows/${GH_WORKFLOW_FETCH}/dispatches`, {
       ref: 'main',
-      inputs: {
-        manga_id: manga.id,
-        lang: lang,
-        start_chapter: start,
-        end_chapter: end,
-        manga_title: title,
-      }
+      inputs: { manga_id: manga.id, lang, start_chapter: start, end_chapter: end, manga_title: title }
     });
-    setFetchProgress(15, '✅ Triggered! Đang chờ workflow chạy...', 'fetch.yml dispatched');
+    setFetchProgress(8, 'Đang chờ runner khởi động…', 'fetch.yml dispatched ✓');
 
-    // Poll for run completion
-    await new Promise(r => setTimeout(r, 6000));
-    let runId = null, attempts = 0;
-    while (!runId && attempts < 20) {
-      const runs = await ghApi(token, 'GET', `/repos/${GH_REPO}/actions/runs?per_page=5`);
-      const freshRun = runs.workflow_runs?.find(r => r.name === 'Fetch Manga Chapters' && (r.status === 'queued' || r.status === 'in_progress'));
-      if (freshRun) { runId = freshRun.id; setFetchProgress(20, `Run #${runId} đang chạy...`, `Run ID: ${runId}`); }
-      else { attempts++; await new Promise(r => setTimeout(r, 3000)); }
-    }
-    if (!runId) throw new Error('Không tìm thấy run. Kiểm tra GitHub Actions.');
+    const fetchRun = await waitForNewRun(token, 'Fetch Manga Chapters', t0);
+    setFetchProgress(12, `Run #${fetchRun.id} đang chạy…`, `Run ID: ${fetchRun.id}`);
+    await pollRun(token, fetchRun.id, 12, 75, (p, m) => setFetchProgress(p, m));
 
-    // Poll run until complete
-    let done = false, pct = 20;
-    while (!done) {
-      await new Promise(r => setTimeout(r, 8000));
-      const run = await ghApi(token, 'GET', `/repos/${GH_REPO}/actions/runs/${runId}`);
-      pct = Math.min(pct + 5, 75);
-      setFetchProgress(pct, `Fetch: ${run.status}...`, `status: ${run.status}`);
-      if (run.status === 'completed') {
-        done = true;
-        if (run.conclusion !== 'success') throw new Error(`Fetch failed: ${run.conclusion}. Xem log: ${run.html_url}`);
-        setFetchProgress(80, '✅ Fetch xong! Đang trigger deploy...', `conclusion: ${run.conclusion}`);
-      }
-    }
-
-    // Trigger deploy
+    setFetchProgress(78, 'Trigger deploy.yml…', 'Fetch done ✓ — triggering deploy');
+    const t1 = Date.now();
     await ghApi(token, 'POST', `/repos/${GH_REPO}/actions/workflows/${GH_WORKFLOW_DEPLOY}/dispatches`, { ref: 'main' });
-    setFetchProgress(85, 'Deploy đang chạy...', 'deploy.yml dispatched');
-    await new Promise(r => setTimeout(r, 5000));
 
-    // Poll deploy
-    let deployDone = false, dpct = 85;
-    while (!deployDone) {
-      await new Promise(r => setTimeout(r, 8000));
-      const runs = await ghApi(token, 'GET', `/repos/${GH_REPO}/actions/runs?per_page=5`);
-      const depRun = runs.workflow_runs?.find(r => r.name === 'Deploy Manga PWA to GitHub Pages' && (r.status === 'queued' || r.status === 'in_progress' || r.status === 'completed'));
-      if (depRun) {
-        dpct = Math.min(dpct + 3, 98);
-        setFetchProgress(dpct, `Deploy: ${depRun.status}...`, `deploy: ${depRun.status}`);
-        if (depRun.status === 'completed') {
-          deployDone = true;
-          if (depRun.conclusion === 'success') {
-            setFetchProgress(100, '🎉 Hoàn tất! Reload để đọc.', 'deploy: success');
-            setTimeout(() => { if (confirm('✅ Đã fetch & deploy xong!\nReload để đọc truyện mới?')) location.reload(); }, 1000);
-          } else throw new Error(`Deploy failed: ${depRun.conclusion}`);
-        }
-      } else { dpct = Math.min(dpct + 2, 95); setFetchProgress(dpct, 'Deploy đang xử lý...'); }
-    }
+    const depRun = await waitForNewRun(token, 'Deploy Manga PWA to GitHub Pages', t1);
+    setFetchProgress(82, `Deploy #${depRun.id} đang chạy…`, `Deploy run: ${depRun.id}`);
+    await pollRun(token, depRun.id, 82, 99, (p, m) => setFetchProgress(p, m));
+
+    setFetchProgress(100, '🎉 Hoàn tất!', 'deploy: success ✓');
+    setTimeout(() => { if (confirm('✅ Fetch & deploy xong!\nReload để đọc truyện mới?')) location.reload(); }, 800);
   } catch(e) {
-    setFetchProgress(0, '❌ Lỗi: ' + e.message, 'ERROR: ' + e.message);
+    setFetchProgress(0, '❌ ' + e.message, 'ERROR: ' + e.message);
     $('btn-do-fetch').disabled = false;
   }
 }
@@ -861,25 +820,8 @@ $('reader').addEventListener('touchstart',e=>{tx=e.touches[0].clientX;},{passive
 $('reader').addEventListener('touchend',e=>{if(tx===null||state.mode==='webtoon')return;const dx=e.changedTouches[0].clientX-tx;if(Math.abs(dx)>60)navigate(dx<0?1:-1);tx=null;},{passive:true});
 
 // Search
-$('btn-search').addEventListener('click', async () => {
-  const q = $('search-input').value.trim();
-  if (!q) return;
-  $('btn-search').disabled = true;
-  $('btn-search').textContent = '...';
-  $('search-results').innerHTML = '<div style="color:var(--muted);text-align:center;margin-top:32px"><div class="spinner" style="margin:0 auto"></div></div>';
-  $('fetch-config').classList.remove('show');
-  try {
-    const results = await searchManga(q);
-    state.searchResults = results;
-    renderSearchResults(results);
-  } catch(e) {
-    $('search-results').innerHTML = `<div style="color:var(--muted);text-align:center;margin-top:20px">❌ ${e.message}</div>`;
-  } finally {
-    $('btn-search').disabled = false;
-    $('btn-search').textContent = 'Tìm';
-  }
-});
-$('search-input').addEventListener('keydown', e => { if(e.key==='Enter') $('btn-search').click(); });
+$('btn-search').addEventListener('click', doSearch);
+$('search-input').addEventListener('keydown', e => { if(e.key==='Enter') doSearch(); });
 $('btn-do-fetch').addEventListener('click', doFetch);
 
 // ── Update fetch.yml to accept manga_title input ──────────

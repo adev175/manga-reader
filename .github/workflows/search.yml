@@ -1,0 +1,100 @@
+name: Search Manga
+
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: 'Tên truyện cần tìm'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install requests
+
+      - name: Search MangaDex
+        run: |
+          python3 - << 'PYEOF'
+          import requests, json, sys
+
+          q = """${{ github.event.inputs.query }}"""
+          r = requests.get(
+              "https://api.mangadex.org/manga",
+              params={
+                  "title": q, "limit": 12,
+                  "includes[]": ["cover_art", "author"],
+                  "order[relevance]": "desc",
+                  "contentRating[]": ["safe", "suggestive", "erotica"],
+              },
+              headers={"User-Agent": "MangaPWA/1.0"},
+              timeout=30,
+          )
+          r.raise_for_status()
+          data = r.json()
+
+          results = []
+          for m in data.get("data", []):
+              attr = m["attributes"]
+              title = attr.get("title", {})
+              desc = attr.get("description", {})
+              cover = next((rel for rel in m.get("relationships", []) if rel["type"] == "cover_art"), None)
+              author = next((rel for rel in m.get("relationships", []) if rel["type"] == "author"), None)
+              results.append({
+                  "id": m["id"],
+                  "title": title.get("en") or title.get("ja") or title.get("ja-ro") or next(iter(title.values()), ""),
+                  "title_vi": title.get("vi", ""),
+                  "desc": (desc.get("vi") or desc.get("en") or "")[:200].replace("<br>","").replace("\n"," "),
+                  "status": attr.get("status", ""),
+                  "year": attr.get("year"),
+                  "cover": cover["attributes"]["fileName"] if cover and cover.get("attributes") else "",
+                  "author": author["attributes"]["name"] if author and author.get("attributes") else "",
+                  "tags": [t["attributes"]["name"].get("en","") for t in attr.get("tags",[])[:4]],
+              })
+
+          # Also get available languages per manga (quick feed check)
+          for res in results:
+              try:
+                  feed = requests.get(
+                      f"https://api.mangadex.org/manga/{res['id']}/feed",
+                      params={"limit": 500, "order[chapter]": "asc"},
+                      headers={"User-Agent": "MangaPWA/1.0"},
+                      timeout=20,
+                  )
+                  if feed.ok:
+                      lang_map = {}
+                      for ch in feed.json().get("data", []):
+                          lang = ch["attributes"]["translatedLanguage"]
+                          chnum = ch["attributes"]["chapter"]
+                          if lang not in lang_map:
+                              lang_map[lang] = set()
+                          if chnum:
+                              lang_map[lang].add(chnum)
+                      res["langs"] = {k: len(v) for k, v in lang_map.items()}
+              except Exception:
+                  res["langs"] = {}
+
+          out = {"query": q, "results": results}
+          with open("docs/search_result.json", "w", encoding="utf-8") as f:
+              json.dump(out, f, ensure_ascii=False, indent=2)
+          print(f"Found {len(results)} results for '{q}'")
+          PYEOF
+
+      - name: Commit result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/search_result.json
+          git diff --staged --quiet && echo "no change" || git commit -m "search: ${{ github.event.inputs.query }}"
+          git push
