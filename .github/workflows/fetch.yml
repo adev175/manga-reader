@@ -14,11 +14,15 @@ on:
       start_chapter:
         description: 'Chapter bắt đầu (để trống = tất cả)'
         required: false
-        default: '40'
+        default: ''
       end_chapter:
         description: 'Chapter kết thúc (để trống = đến cuối)'
         required: false
-        default: '40'
+        default: ''
+      manga_title:
+        description: 'Tên truyện (để update manifest)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -49,7 +53,6 @@ jobs:
           if [ -n "${{ github.event.inputs.end_chapter }}" ]; then
             ARGS="$ARGS --end ${{ github.event.inputs.end_chapter }}"
           fi
-
           python scripts/download.py \
             "${{ github.event.inputs.manga_id }}" \
             --lang "${{ github.event.inputs.lang }}" \
@@ -58,9 +61,11 @@ jobs:
 
       - name: Update manifest.json
         run: |
+          TITLE="${{ github.event.inputs.manga_title }}"
+          if [ -z "$TITLE" ]; then TITLE="Manga Reader"; fi
           python scripts/generate_manifest.py \
             --docs docs \
-            --title "Nippon Sangoku"
+            --title "$TITLE"
 
       - name: Commit and push chapters
         run: |
@@ -68,5 +73,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/chapters/ docs/manifest.json
           git diff --staged --quiet && echo "Nothing to commit" || \
-            git commit -m "chore: add chapters (lang=${{ github.event.inputs.lang }}, ch=${{ github.event.inputs.start_chapter }}-${{ github.event.inputs.end_chapter }})"
+            git commit -m "chore: fetch ${{ github.event.inputs.manga_id }} [${  { github.event.inputs.lang }}] ch=${{ github.event.inputs.start_chapter }}-${{ github.event.inputs.end_chapter }}"
           git push

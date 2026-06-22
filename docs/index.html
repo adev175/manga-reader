@@ -12,376 +12,218 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-/* ── Reset & Base ────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #0d0d0d;
-  --surface: #161616;
-  --surface2: #1f1f1f;
-  --border: #2a2a2a;
-  --text: #e8e8e8;
-  --muted: #6b6b6b;
-  --accent: #c8a96e;       /* warm gold — ink on paper feel */
-  --accent2: #7c4d2f;
-  --danger: #c0392b;
-  --r: 6px;
-  --header-h: 48px;
-  --footer-h: 56px;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0d0d;--surface:#161616;--surface2:#1f1f1f;--border:#2a2a2a;
+  --text:#e8e8e8;--muted:#6b6b6b;--accent:#c8a96e;--accent2:#7c4d2f;
+  --green:#2ecc71;--red:#c0392b;--r:6px;--header-h:48px;--footer-h:56px;
 }
-html, body {
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  font-size: 14px;
-  overflow: hidden;
-}
-button { cursor: pointer; border: none; background: none; color: inherit; font: inherit; }
-input, select { font: inherit; color: inherit; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 6px 10px; }
-a { color: var(--accent); text-decoration: none; }
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;overflow:hidden}
+button{cursor:pointer;border:none;background:none;color:inherit;font:inherit}
+input,select{font:inherit;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;width:100%}
+a{color:var(--accent);text-decoration:none}
+#app{display:flex;flex-direction:column;height:100dvh}
 
-/* ── Layout ────────────────────────────────────── */
-#app { display: flex; flex-direction: column; height: 100dvh; }
+/* ── Header ── */
+header{height:var(--header-h);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:8px;flex-shrink:0;transition:transform .25s ease;z-index:10}
+header.hidden{transform:translateY(-100%)}
+#logo{font-weight:700;font-size:15px;color:var(--accent);letter-spacing:.04em;flex-shrink:0;cursor:pointer}
+#chapter-select{flex:1;min-width:0;font-size:13px;padding:4px 8px}
+#page-info{font-size:12px;color:var(--muted);white-space:nowrap;min-width:52px;text-align:right}
+#btn-add-manga{font-size:18px;padding:4px 6px;border-radius:var(--r);color:var(--muted);transition:color .15s}
+#btn-add-manga:hover{color:var(--accent)}
+#btn-settings{font-size:18px;padding:4px 6px;border-radius:var(--r);color:var(--muted);transition:color .15s}
+#btn-settings:hover{color:var(--text)}
 
-/* ── Header ────────────────────────────────────── */
-header {
-  height: var(--header-h);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  gap: 8px;
-  flex-shrink: 0;
-  transition: transform 0.25s ease;
-  z-index: 10;
-}
-header.hidden { transform: translateY(-100%); }
-#logo {
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--accent);
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-}
-#chapter-select {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  padding: 4px 8px;
-}
-#page-info {
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-  min-width: 52px;
-  text-align: right;
-}
-#btn-settings {
-  font-size: 18px;
-  padding: 4px 6px;
-  border-radius: var(--r);
-  color: var(--muted);
-  transition: color 0.15s;
-}
-#btn-settings:hover { color: var(--text); }
+/* ── Reader ── */
+#reader{flex:1;overflow:hidden;position:relative;background:var(--bg);outline:none}
+#reader.webtoon{overflow-y:auto;overflow-x:hidden}
+#strip-container{display:none;flex-direction:column;align-items:center;width:100%;gap:0}
+#strip-container.active{display:flex}
+#strip-container img{width:100%;max-width:720px;display:block;user-select:none}
+#page-container{display:flex;align-items:center;justify-content:center;width:100%;height:100%;position:relative;overflow:hidden}
+#page-container.hidden{display:none}
+#page-img{max-width:100%;max-height:100%;object-fit:contain;user-select:none;touch-action:pinch-zoom;transition:opacity .15s}
+#page-img.loading{opacity:.3}
+#tap-prev,#tap-next{position:absolute;top:0;bottom:0;width:38%;z-index:5;cursor:pointer}
+#tap-prev{left:0}
+#tap-next{right:0}
+#tap-middle{position:absolute;top:0;bottom:0;left:38%;right:38%;z-index:5;cursor:pointer}
 
-/* ── Reader ────────────────────────────────────── */
-#reader {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-  background: var(--bg);
-  outline: none;
-}
-#reader.webtoon { overflow-y: auto; overflow-x: hidden; }
+/* ── Footer ── */
+footer{height:var(--footer-h);background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;padding:0 10px;flex-shrink:0;transition:transform .25s ease;z-index:10}
+footer.hidden{transform:translateY(100%)}
+.nav-btn{padding:8px 14px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border);font-size:16px;transition:background .15s;flex-shrink:0}
+.nav-btn:hover:not(:disabled){background:var(--border)}
+.nav-btn:disabled{opacity:.35;cursor:default}
+#progress-wrap{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+#progress-bar-track{width:100%;height:4px;background:var(--border);border-radius:2px;cursor:pointer;position:relative}
+#progress-bar-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .1s;pointer-events:none}
+#page-label{font-size:11px;color:var(--muted);text-align:center}
 
-/* Long-strip mode */
-#strip-container {
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-  gap: 0;
-}
-#strip-container.active { display: flex; }
-#strip-container img {
-  width: 100%;
-  max-width: 720px;
-  display: block;
-  user-select: none;
-}
+/* ── Slide panels (shared) ── */
+.slide-panel{position:fixed;inset:0;z-index:50;display:none}
+.slide-panel.open{display:flex}
+.panel-overlay{position:absolute;inset:0;background:rgba(0,0,0,.65)}
+.panel-box{position:absolute;right:0;top:0;bottom:0;width:min(360px,94vw);background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.panel-box.left{right:auto;left:0;border-left:none;border-right:1px solid var(--border)}
+.panel-head{padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.panel-head h2{font-size:15px;font-weight:700;color:var(--accent);flex:1}
+.panel-close{font-size:18px;color:var(--muted);padding:4px 6px;border-radius:var(--r)}
+.panel-close:hover{color:var(--text)}
+.panel-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
 
-/* Single-page mode */
-#page-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  position: relative;
-  overflow: hidden;
-}
-#page-container.hidden { display: none; }
-#page-img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  user-select: none;
-  touch-action: pinch-zoom;
-  transition: opacity 0.15s;
-}
-#page-img.loading { opacity: 0.3; }
+/* ── Settings ── */
+.setting-group{display:flex;flex-direction:column;gap:8px}
+.setting-group>label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.setting-row{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:13px;background:var(--surface2);transition:all .15s;cursor:pointer}
+.chip.active{background:var(--accent);color:#0d0d0d;border-color:var(--accent);font-weight:600}
+.wide-btn{width:100%;padding:9px 14px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface2);font-size:13px;text-align:center;cursor:pointer;transition:background .15s}
+.wide-btn:hover:not(:disabled){background:var(--border)}
+.wide-btn:disabled{opacity:.4;cursor:default}
 
-/* tap zones */
-#tap-prev, #tap-next {
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 38%;
-  z-index: 5;
-  cursor: pointer;
-}
-#tap-prev { left: 0; }
-#tap-next { right: 0; }
-#tap-middle {
-  position: absolute;
-  top: 0; bottom: 0;
-  left: 38%; right: 38%;
-  z-index: 5;
-  cursor: pointer;
-}
+/* ── Download ── */
+.dl-btn{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;color:var(--text);width:100%}
+.dl-btn:hover:not(:disabled){background:var(--border)}
+.dl-btn:disabled{opacity:.4;cursor:default}
+.dl-icon{font-size:16px}
+.dl-label{flex:1;text-align:left}
+.dl-size{font-size:11px;color:var(--muted);font-weight:400}
+.dl-progress{display:none;flex-direction:column;gap:4px}
+.dl-progress.show{display:flex}
+.dl-bar-track{width:100%;height:6px;background:var(--border);border-radius:3px}
+.dl-bar-fill{height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width .1s}
+.dl-status{font-size:11px;color:var(--muted)}
 
-/* ── Footer Nav ────────────────────────────────── */
-footer {
-  height: var(--footer-h);
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  flex-shrink: 0;
-  transition: transform 0.25s ease;
-  z-index: 10;
-}
-footer.hidden { transform: translateY(100%); }
-.nav-btn {
-  padding: 8px 14px;
-  border-radius: var(--r);
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  font-size: 16px;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-.nav-btn:hover:not(:disabled) { background: var(--border); }
-.nav-btn:disabled { opacity: 0.35; cursor: default; }
-#progress-wrap {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-#progress-bar-track {
-  width: 100%;
-  height: 4px;
-  background: var(--border);
-  border-radius: 2px;
-  cursor: pointer;
-  position: relative;
-}
-#progress-bar-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-  transition: width 0.1s;
-  pointer-events: none;
-}
-#page-label {
-  font-size: 11px;
-  color: var(--muted);
-  text-align: center;
-}
+/* ── Chapter index ── */
+#index-view{display:none;flex:1;overflow-y:auto;padding:16px}
+#index-view.active{display:block}
+#index-title{font-size:20px;font-weight:700;color:var(--accent);margin-bottom:4px}
+#index-subtitle{font-size:12px;color:var(--muted);margin-bottom:16px}
+#index-back{margin-bottom:12px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--accent);cursor:pointer}
+.ch-list{display:flex;flex-direction:column;gap:2px}
+.ch-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r);border:1px solid transparent;cursor:pointer;transition:all .12s}
+.ch-item:hover{background:var(--surface2);border-color:var(--border)}
+.ch-item.current{background:var(--surface2);border-color:var(--accent)}
+.ch-num{font-weight:700;font-size:14px;color:var(--accent);min-width:36px}
+.ch-title-text{flex:1;font-size:13px;color:var(--text)}
+.ch-pages-count{font-size:11px;color:var(--muted)}
+.ch-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.ch-dot.read{background:var(--accent2)}
 
-/* ── Settings Panel ────────────────────────────── */
-#settings-panel {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: none;
-}
-#settings-panel.open { display: flex; }
-#settings-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.65);
-}
-#settings-box {
-  position: absolute;
-  right: 0; top: 0; bottom: 0;
-  width: min(320px, 90vw);
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  padding: 20px 16px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-#settings-box h2 {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--accent);
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 10px;
-}
-.setting-group { display: flex; flex-direction: column; gap: 8px; }
-.setting-group label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.setting-row { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip {
-  padding: 5px 12px;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  font-size: 13px;
-  background: var(--surface2);
-  transition: all 0.15s;
-}
-.chip.active { background: var(--accent); color: #0d0d0d; border-color: var(--accent); font-weight: 600; }
-#btn-close-settings {
-  margin-top: auto;
-  padding: 10px;
-  border-radius: var(--r);
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  font-size: 14px;
-}
+/* ── Add Manga / Search ── */
+#search-view{display:none;flex:1;overflow-y:auto}
+#search-view.active{display:flex;flex-direction:column}
+.search-wrap{padding:16px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-shrink:0}
+.search-wrap input{flex:1}
+.search-wrap button{flex-shrink:0;padding:6px 14px;border-radius:var(--r);background:var(--accent);color:#0d0d0d;font-weight:700;border:none;cursor:pointer;white-space:nowrap}
+.search-wrap button:disabled{opacity:.5;cursor:default}
+#search-results{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.manga-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px;display:flex;gap:12px;cursor:pointer;transition:border-color .15s}
+.manga-card:hover{border-color:var(--accent)}
+.manga-card.selected{border-color:var(--accent);background:var(--surface)}
+.manga-thumb{width:56px;height:80px;object-fit:cover;border-radius:4px;flex-shrink:0;background:var(--border)}
+.manga-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.manga-title{font-size:14px;font-weight:700;color:var(--text);line-height:1.3}
+.manga-meta{font-size:11px;color:var(--muted)}
+.manga-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+.manga-tag{font-size:10px;padding:2px 7px;border-radius:20px;background:var(--border);color:var(--muted)}
+.manga-tag.status-ongoing{color:var(--green)}
+.manga-tag.status-completed{color:var(--accent)}
 
-/* ── Index Page ────────────────────────────────── */
-#index-view {
-  display: none;
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-#index-view.active { display: block; }
-#index-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--accent);
-  margin-bottom: 4px;
-}
-#index-subtitle { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
-.ch-list { display: flex; flex-direction: column; gap: 2px; }
-.ch-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: var(--r);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all 0.12s;
-}
-.ch-item:hover { background: var(--surface2); border-color: var(--border); }
-.ch-item.current { background: var(--surface2); border-color: var(--accent); }
-.ch-num { font-weight: 700; font-size: 14px; color: var(--accent); min-width: 36px; }
-.ch-title-text { flex: 1; font-size: 13px; color: var(--text); }
-.ch-pages { font-size: 11px; color: var(--muted); }
-.ch-read-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--muted);
-  flex-shrink: 0;
-}
-.ch-read-dot.read { background: var(--accent2); }
+/* ── Fetch config panel ── */
+#fetch-config{display:none;flex-direction:column;gap:14px;padding:16px;background:var(--surface);border-top:1px solid var(--border)}
+#fetch-config.show{display:flex}
+#fetch-manga-title{font-size:15px;font-weight:700;color:var(--accent);margin-bottom:2px}
+#fetch-manga-meta{font-size:12px;color:var(--muted);margin-bottom:8px}
+.fetch-row{display:flex;gap:8px;align-items:flex-end}
+.fetch-row .field{flex:1;display:flex;flex-direction:column;gap:4px}
+.fetch-row label{font-size:11px;color:var(--muted)}
+.fetch-row input{padding:5px 8px;font-size:13px}
+.lang-chips{display:flex;gap:6px;flex-wrap:wrap}
+.lang-chip{padding:4px 10px;border-radius:20px;border:1px solid var(--border);font-size:12px;background:var(--surface2);cursor:pointer;transition:all .15s}
+.lang-chip.active{background:var(--accent);color:#0d0d0d;border-color:var(--accent);font-weight:600}
+.ch-count-badge{font-size:11px;color:var(--muted);font-style:italic}
+#btn-do-fetch{padding:11px;border-radius:var(--r);background:var(--accent);color:#0d0d0d;font-weight:700;font-size:14px;border:none;cursor:pointer;transition:opacity .15s;width:100%}
+#btn-do-fetch:disabled{opacity:.45;cursor:default}
+#fetch-status-wrap{display:none;flex-direction:column;gap:6px}
+#fetch-status-wrap.show{display:flex}
+#fetch-bar-track{width:100%;height:8px;background:var(--border);border-radius:4px}
+#fetch-bar-fill{height:100%;background:var(--accent);border-radius:4px;width:0%;transition:width .3s}
+#fetch-status-text{font-size:12px;color:var(--muted)}
+#fetch-log{font-size:11px;color:var(--muted);background:var(--bg);border-radius:var(--r);padding:8px;max-height:80px;overflow-y:auto;font-family:monospace}
 
-/* ── Empty / Error ─────────────────────────────── */
-#empty {
-  position: absolute;
-  inset: 0;
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 14px;
-  text-align: center;
-  padding: 24px;
-}
-#empty.show { display: flex; }
-#empty h3 { font-size: 18px; color: var(--text); }
-#empty pre { font-size: 11px; background: var(--surface2); padding: 10px 14px; border-radius: var(--r); white-space: pre-wrap; text-align: left; max-width: 480px; }
-
-/* ── Loading spinner ────────────────────────────── */
-@keyframes spin { to { transform: rotate(360deg); } }
-.spinner {
-  width: 32px; height: 32px;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-/* ── Download panel ──────────────────────────────── */
-#dl-panel {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-#dl-panel label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.dl-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
-  border-radius: var(--r);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  color: var(--text);
-  width: 100%;
-}
-.dl-btn:hover:not(:disabled) { background: var(--border); }
-.dl-btn:disabled { opacity: 0.45; cursor: default; }
-.dl-btn .dl-icon { font-size: 16px; }
-.dl-btn .dl-label { flex: 1; text-align: left; }
-.dl-btn .dl-size { font-size: 11px; color: var(--muted); font-weight: 400; }
-#dl-progress-wrap { display: none; flex-direction: column; gap: 4px; }
-#dl-progress-wrap.show { display: flex; }
-#dl-bar-track { width: 100%; height: 6px; background: var(--border); border-radius: 3px; }
-#dl-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; width: 0%; transition: width 0.1s; }
-#dl-status { font-size: 11px; color: var(--muted); }
-
-/* ── Scrollbar ─────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+/* ── Empty / spinner ── */
+#empty{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);font-size:14px;text-align:center;padding:24px}
+#empty.show{display:flex}
+#empty h3{font-size:18px;color:var(--text)}
+#empty pre{font-size:11px;background:var(--surface2);padding:10px 14px;border-radius:var(--r);white-space:pre-wrap;text-align:left;max-width:480px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 </style>
 </head>
 <body>
 <div id="app">
+
   <!-- Header -->
   <header id="header">
-    <span id="logo">📖</span>
-    <select id="chapter-select" title="Chọn chapter"></select>
+    <span id="logo" title="Thư viện">📖</span>
+    <select id="chapter-select"></select>
     <span id="page-info">—</span>
+    <button id="btn-add-manga" title="Thêm truyện">＋</button>
     <button id="btn-settings" title="Cài đặt">⚙</button>
   </header>
 
-  <!-- Index view (chapter list) -->
+  <!-- Chapter index view -->
   <div id="index-view">
+    <div id="index-back">← Quay lại đọc</div>
     <div id="index-title">Manga</div>
     <div id="index-subtitle"></div>
     <div class="ch-list" id="ch-list"></div>
+  </div>
+
+  <!-- Search / Add manga view -->
+  <div id="search-view">
+    <div class="search-wrap">
+      <input id="search-input" placeholder="Tìm tên truyện..." autocomplete="off">
+      <button id="btn-search">Tìm</button>
+    </div>
+    <div id="search-results">
+      <div style="color:var(--muted);font-size:13px;text-align:center;margin-top:32px">Nhập tên truyện để tìm kiếm trên MangaDex</div>
+    </div>
+    <!-- Fetch config (shows after selecting a manga) -->
+    <div id="fetch-config">
+      <div>
+        <div id="fetch-manga-title"></div>
+        <div id="fetch-manga-meta"></div>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">NGÔN NGỮ</label>
+        <div class="lang-chips" id="lang-chips"></div>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">CHAPTER <span class="ch-count-badge" id="ch-count-badge"></span></label>
+        <div class="fetch-row">
+          <div class="field"><label>Từ</label><input id="fetch-start" type="number" min="1" placeholder="1"></div>
+          <div class="field"><label>Đến</label><input id="fetch-end" type="number" min="1" placeholder="(cuối)"></div>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">GITHUB TOKEN (để trigger Actions)</label>
+        <input id="gh-token-input" type="password" placeholder="ghp_xxxx..." autocomplete="off">
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">Token lưu trong sessionStorage, không gửi đi đâu ngoài GitHub API</div>
+      </div>
+      <button id="btn-do-fetch">🚀 Fetch & Deploy</button>
+      <div id="fetch-status-wrap">
+        <div id="fetch-bar-track"><div id="fetch-bar-fill"></div></div>
+        <div id="fetch-status-text"></div>
+        <div id="fetch-log"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Reader -->
@@ -392,11 +234,7 @@ footer.hidden { transform: translateY(100%); }
       <p id="empty-msg"></p>
       <pre id="empty-detail" style="display:none"></pre>
     </div>
-
-    <!-- Webtoon strip -->
     <div id="strip-container"></div>
-
-    <!-- Single page -->
     <div id="page-container">
       <div id="tap-prev"></div>
       <div id="tap-middle"></div>
@@ -410,9 +248,7 @@ footer.hidden { transform: translateY(100%); }
     <button class="nav-btn" id="btn-prev-ch" title="Chapter trước">⏮</button>
     <button class="nav-btn" id="btn-prev-pg" title="Trang trước">◀</button>
     <div id="progress-wrap">
-      <div id="progress-bar-track">
-        <div id="progress-bar-fill" style="width:0%"></div>
-      </div>
+      <div id="progress-bar-track"><div id="progress-bar-fill" style="width:0%"></div></div>
       <div id="page-label">—</div>
     </div>
     <button class="nav-btn" id="btn-next-pg" title="Trang sau">▶</button>
@@ -421,548 +257,637 @@ footer.hidden { transform: translateY(100%); }
 </div>
 
 <!-- Settings Panel -->
-<div id="settings-panel">
-  <div id="settings-overlay"></div>
-  <div id="settings-box">
-    <h2>⚙ Cài đặt đọc truyện</h2>
-
-    <div class="setting-group">
-      <label>Chế độ đọc</label>
-      <div class="setting-row">
-        <button class="chip active" data-mode="single">Từng trang</button>
-        <button class="chip" data-mode="webtoon">Cuộn dài</button>
+<div class="slide-panel" id="settings-panel">
+  <div class="panel-overlay" id="settings-overlay"></div>
+  <div class="panel-box">
+    <div class="panel-head">
+      <h2>⚙ Cài đặt</h2>
+      <button class="panel-close" id="btn-close-settings">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="setting-group">
+        <label>Chế độ đọc</label>
+        <div class="setting-row">
+          <button class="chip active" data-mode="single">Từng trang</button>
+          <button class="chip" data-mode="webtoon">Cuộn dài</button>
+        </div>
       </div>
-    </div>
-
-    <div class="setting-group">
-      <label>Hướng lật trang</label>
-      <div class="setting-row">
-        <button class="chip active" data-dir="ltr">LTR →</button>
-        <button class="chip" data-dir="rtl">← RTL</button>
+      <div class="setting-group">
+        <label>Hướng lật trang</label>
+        <div class="setting-row">
+          <button class="chip active" data-dir="ltr">LTR →</button>
+          <button class="chip" data-dir="rtl">← RTL</button>
+        </div>
       </div>
-    </div>
-
-    <div class="setting-group">
-      <label>Ẩn UI khi đọc</label>
-      <div class="setting-row">
-        <button class="chip active" data-ui="auto">Tự động</button>
-        <button class="chip" data-ui="always">Luôn hiện</button>
+      <div class="setting-group">
+        <label>Thanh UI</label>
+        <div class="setting-row">
+          <button class="chip active" data-ui="auto">Tự ẩn</button>
+          <button class="chip" data-ui="always">Luôn hiện</button>
+        </div>
       </div>
-    </div>
-
-    <div class="setting-group">
-      <label>Danh sách chapter</label>
-      <button class="chip" id="btn-show-index" style="width:100%;text-align:center">Xem danh sách</button>
-    </div>
-
-    <div class="setting-group">
-      <label>Tải chapter hiện tại</label>
-      <div id="dl-panel">
-        <button class="dl-btn" id="btn-dl-cbz">
-          <span class="dl-icon">📦</span>
-          <span class="dl-label">Tải CBZ</span>
-          <span class="dl-size">Zip ảnh gốc</span>
-        </button>
-        <button class="dl-btn" id="btn-dl-pdf">
-          <span class="dl-icon">📄</span>
-          <span class="dl-label">Tải PDF</span>
-          <span class="dl-size">Mở được mọi app</span>
-        </button>
-        <div id="dl-progress-wrap">
-          <div id="dl-bar-track"><div id="dl-bar-fill"></div></div>
-          <div id="dl-status">Đang xử lý...</div>
+      <div class="setting-group">
+        <label>Thư viện</label>
+        <button class="wide-btn" id="btn-show-index">Danh sách chapter</button>
+      </div>
+      <div class="setting-group">
+        <label>Tải chapter hiện tại</label>
+        <button class="dl-btn" id="btn-dl-cbz"><span class="dl-icon">📦</span><span class="dl-label">Tải CBZ</span><span class="dl-size">Zip ảnh gốc</span></button>
+        <button class="dl-btn" id="btn-dl-pdf"><span class="dl-icon">📄</span><span class="dl-label">Tải PDF</span><span class="dl-size">Mở được mọi app</span></button>
+        <div class="dl-progress" id="dl-progress-wrap">
+          <div class="dl-bar-track"><div class="dl-bar-fill" id="dl-bar-fill"></div></div>
+          <div class="dl-status" id="dl-status"></div>
         </div>
       </div>
     </div>
-
-    <button id="btn-close-settings">✕ Đóng</button>
   </div>
 </div>
 
 <script>
-// ─── State ───────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const MDEX = 'https://api.mangadex.org';
+const GH_REPO = 'adev175/manga-reader';
+const GH_WORKFLOW_FETCH = 'fetch.yml';
+const GH_WORKFLOW_DEPLOY = 'deploy.yml';
+const MANGA_TITLE = 'Nippon Sangoku'; // default title for generate_manifest
+
+// ══════════════════════════════════════════════════════════
+// State
+// ══════════════════════════════════════════════════════════
 const state = {
-  manifest: null,
-  chapters: [],
-  currentChIdx: 0,
-  currentPage: 0,
-  pages: [],          // filenames of current chapter
-  mode: 'single',     // 'single' | 'webtoon'
-  dir: 'ltr',         // 'ltr' | 'rtl'
-  uiMode: 'auto',     // 'auto' | 'always'
-  uiVisible: true,
+  manifest: null, chapters: [], currentChIdx: 0, currentPage: 0, pages: [],
+  mode: 'single', dir: 'ltr', uiMode: 'auto', uiVisible: true,
   readSet: new Set(),
+  // search
+  searchResults: [], selectedManga: null, selectedLang: 'vi', selectedMangaLangs: [], selectedMangaChCount: {},
 };
 
-// ─── DOM refs ────────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-const header = $('header'), footer = $('footer');
-const reader = $('reader');
-const pageImg = $('page-img'), pageContainer = $('page-container');
-const stripContainer = $('strip-container');
-const chapterSelect = $('chapter-select');
-const pageInfo = $('page-info'), pageLabel = $('page-label');
-const progressFill = $('progress-bar-fill'), progressTrack = $('progress-bar-track');
-const empty = $('empty'), spinner = $('spinner');
-const emptyTitle = $('empty-title'), emptyMsg = $('empty-msg'), emptyDetail = $('empty-detail');
-const settingsPanel = $('settings-panel');
-const indexView = $('index-view'), chList = $('ch-list');
-const indexTitle = $('index-title'), indexSubtitle = $('index-subtitle');
-
-// ─── Persist ─────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// Persist
+// ══════════════════════════════════════════════════════════
 function saveState() {
-  try {
-    localStorage.setItem('manga_progress', JSON.stringify({
-      chIdx: state.currentChIdx,
-      page: state.currentPage,
-      mode: state.mode,
-      dir: state.dir,
-      uiMode: state.uiMode,
-      read: [...state.readSet],
-    }));
-  } catch {}
+  try { localStorage.setItem('mpwa', JSON.stringify({ chIdx: state.currentChIdx, page: state.currentPage, mode: state.mode, dir: state.dir, uiMode: state.uiMode, read: [...state.readSet] })); } catch {}
 }
-function loadState() {
-  try {
-    const d = JSON.parse(localStorage.getItem('manga_progress') || '{}');
-    if (d.mode) state.mode = d.mode;
-    if (d.dir) state.dir = d.dir;
-    if (d.uiMode) state.uiMode = d.uiMode;
-    if (Array.isArray(d.read)) d.read.forEach(v => state.readSet.add(v));
-    return { chIdx: d.chIdx ?? 0, page: d.page ?? 0 };
-  } catch { return { chIdx: 0, page: 0 }; }
+function loadSavedState() {
+  try { const d = JSON.parse(localStorage.getItem('mpwa') || '{}'); if (d.mode) state.mode = d.mode; if (d.dir) state.dir = d.dir; if (d.uiMode) state.uiMode = d.uiMode; if (d.read) d.read.forEach(v => state.readSet.add(v)); return { chIdx: d.chIdx ?? 0, page: d.page ?? 0 }; } catch { return { chIdx: 0, page: 0 }; }
 }
 
-// ─── Manifest loading ─────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// View management
+// ══════════════════════════════════════════════════════════
+const views = { reader: $('reader'), index: $('index-view'), search: $('search-view') };
+const footerEl = $('footer'), headerEl = $('header');
+
+function showView(name) {
+  Object.entries(views).forEach(([k, el]) => {
+    if (k === 'reader') { el.style.display = name === 'reader' ? '' : 'none'; }
+    else { el.classList.toggle('active', k === name); }
+  });
+  footerEl.style.display = name === 'reader' ? '' : 'none';
+  if (name !== 'reader') { headerEl.classList.remove('hidden'); }
+  // swap header controls
+  $('chapter-select').style.display = name === 'reader' ? '' : 'none';
+  $('page-info').style.display = name === 'reader' ? '' : 'none';
+}
+
+// ══════════════════════════════════════════════════════════
+// Manifest / Chapter loading
+// ══════════════════════════════════════════════════════════
 async function loadManifest() {
-  showLoading('Đang tải manifest...');
+  showEmpty('Đang tải...', '', true);
   try {
-    const r = await fetch('./manifest.json');
-    if (!r.ok) throw new Error(`HTTP ${r.status} khi tải manifest.json`);
+    const r = await fetch('./manifest.json?t=' + Date.now());
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     state.manifest = await r.json();
     state.chapters = state.manifest.chapters || [];
     if (!state.chapters.length) {
-      showError('Không có chapter nào', 'manifest.json rỗng hoặc chưa download truyện.\n\nChạy lệnh:\n  cd scripts && pip install requests tqdm\n  python download.py https://mangadex.org/title/<ID> --lang vi --start 40 --end 40');
+      showEmpty('Chưa có truyện nào', 'Nhấn ＋ để tìm và thêm truyện từ MangaDex.', false);
+      showView('reader');
       return;
     }
-    initUI();
-  } catch (e) {
-    showError('Không tải được manifest.json', 
-      'Hãy chạy script download.py trước:\n\n  cd scripts\n  pip install requests tqdm\n  python download.py https://mangadex.org/title/c4b36f15-4ee5-425f-a77d-c2e7cbb970d8 --lang vi --start 40 --end 40\n\nSau đó mở lại trang này.',
-      e.message);
+    const saved = loadSavedState();
+    initReaderUI();
+    const chIdx = Math.min(saved.chIdx, state.chapters.length - 1);
+    await loadChapter(chIdx, saved.page);
+    showView('reader');
+  } catch(e) {
+    showEmpty('Không tải được manifest.json', 'Nhấn ＋ để tìm và thêm truyện.', false, e.message);
+    showView('reader');
   }
 }
 
-function showLoading(msg) {
-  empty.classList.add('show');
-  spinner.style.display = 'block';
-  emptyTitle.textContent = msg;
-  emptyMsg.textContent = '';
-  emptyDetail.style.display = 'none';
-  pageContainer.classList.add('hidden');
-  stripContainer.classList.remove('active');
-}
-
-function showError(title, msg, detail) {
-  empty.classList.add('show');
-  spinner.style.display = 'none';
-  emptyTitle.textContent = '⚠ ' + title;
-  emptyMsg.textContent = msg;
-  if (detail) { emptyDetail.textContent = detail; emptyDetail.style.display = 'block'; }
-  pageContainer.classList.add('hidden');
-  stripContainer.classList.remove('active');
-}
-
-function hideEmpty() {
-  empty.classList.remove('show');
-}
-
-// ─── Init UI ─────────────────────────────────────────────────────
-function initUI() {
-  const saved = loadState();
-
-  // Title
-  if (state.manifest.title) indexTitle.textContent = state.manifest.title;
-
-  // Chapter select
-  chapterSelect.innerHTML = state.chapters.map((ch, i) =>
-    `<option value="${i}">Ch.${ch.chapter} ${ch.title}</option>`
-  ).join('');
-
-  // Index list
-  buildIndexList();
-
-  // Apply saved settings chips
+function initReaderUI() {
+  if (state.manifest?.title) document.title = state.manifest.title + ' | Manga Reader';
+  $('chapter-select').innerHTML = state.chapters.map((ch, i) =>
+    `<option value="${i}">Ch.${ch.chapter} ${ch.title}</option>`).join('');
   applyChip('data-mode', state.mode);
   applyChip('data-dir', state.dir);
   applyChip('data-ui', state.uiMode);
-
-  // Go to saved position
-  const chIdx = Math.min(saved.chIdx, state.chapters.length - 1);
-  loadChapter(chIdx, saved.page);
 }
 
-function buildIndexList() {
-  chList.innerHTML = state.chapters.map((ch, i) => {
+async function loadChapter(idx, startPage = 0) {
+  if (idx < 0 || idx >= state.chapters.length) return;
+  state.currentChIdx = idx;
+  const ch = state.chapters[idx];
+  state.pages = ch.pages;
+  $('chapter-select').value = idx;
+  showEmpty(`Chapter ${ch.chapter}...`, '', true);
+
+  const dir = `chapters/${ch.dir}`;
+  const ok = await new Promise(res => {
+    const img = new Image();
+    img.onload = () => res(true);
+    img.onerror = () => res(false);
+    img.src = `${dir}/${ch.pages[0]}`;
+  });
+
+  if (!ok) { showEmpty('Không tìm thấy ảnh', `Path: ${dir}/${ch.pages[0]}\n\nChapter này chưa được download.`, false); return; }
+  hideEmpty();
+  state.readSet.add(String(idx));
+  saveState();
+
+  if (state.mode === 'webtoon') renderWebtoon(dir);
+  else renderSingle(dir, startPage);
+  updateNav(); updateProgress();
+}
+
+// ══════════════════════════════════════════════════════════
+// Render
+// ══════════════════════════════════════════════════════════
+const pageImg = $('page-img'), pageContainer = $('page-container'), stripContainer = $('strip-container');
+const progressFill = $('progress-bar-fill'), pageLabel = $('page-label'), pageInfo = $('page-info');
+const progressTrack = $('progress-bar-track');
+
+function renderSingle(dir, startPage = 0) {
+  stripContainer.classList.remove('active'); pageContainer.classList.remove('hidden');
+  $('reader').classList.remove('webtoon'); goToPage(startPage, dir);
+}
+function renderWebtoon(dir) {
+  pageContainer.classList.add('hidden'); stripContainer.classList.add('active');
+  $('reader').classList.add('webtoon');
+  stripContainer.innerHTML = state.pages.map((p, i) => `<img src="${dir}/${p}" alt="p${i+1}" loading="lazy">`).join('');
+}
+function goToPage(idx, dir) {
+  dir = dir || `chapters/${state.chapters[state.currentChIdx].dir}`;
+  idx = Math.max(0, Math.min(idx, state.pages.length - 1));
+  state.currentPage = idx;
+  pageImg.classList.add('loading');
+  pageImg.onload = () => pageImg.classList.remove('loading');
+  pageImg.src = `${dir}/${state.pages[idx]}`;
+  if (idx + 1 < state.pages.length) new Image().src = `${dir}/${state.pages[idx + 1]}`;
+  updateProgress(); updateNav(); saveState();
+}
+function navigate(delta) {
+  if (state.mode === 'webtoon') return;
+  const d = state.dir === 'rtl' ? -delta : delta, next = state.currentPage + d;
+  if (next < 0) { if (state.currentChIdx > 0) loadChapter(state.currentChIdx - 1, state.pages.length - 1); }
+  else if (next >= state.pages.length) { if (state.currentChIdx < state.chapters.length - 1) loadChapter(state.currentChIdx + 1, 0); }
+  else goToPage(next);
+}
+function updateNav() {
+  $('btn-prev-ch').disabled = state.currentChIdx <= 0;
+  $('btn-next-ch').disabled = state.currentChIdx >= state.chapters.length - 1;
+  const w = state.mode === 'webtoon';
+  $('btn-prev-pg').disabled = w || state.currentPage <= 0;
+  $('btn-next-pg').disabled = w || state.currentPage >= state.pages.length - 1;
+}
+function updateProgress() {
+  const t = state.pages.length, c = state.currentPage + 1, pct = t > 0 ? (c / t) * 100 : 0;
+  progressFill.style.width = `${pct}%`; pageInfo.textContent = `${c}/${t}`; pageLabel.textContent = `Trang ${c} / ${t}`;
+}
+
+// ══════════════════════════════════════════════════════════
+// Empty state
+// ══════════════════════════════════════════════════════════
+const emptyEl = $('empty');
+function showEmpty(title, msg, loading, detail) {
+  emptyEl.classList.add('show');
+  $('spinner').style.display = loading ? 'block' : 'none';
+  $('empty-title').textContent = (loading ? '' : '⚠ ') + title;
+  $('empty-msg').textContent = msg || '';
+  const det = $('empty-detail'); det.style.display = detail ? 'block' : 'none'; if (detail) det.textContent = detail;
+  pageContainer.classList.add('hidden'); stripContainer.classList.remove('active');
+}
+function hideEmpty() { emptyEl.classList.remove('show'); pageContainer.classList.remove('hidden'); }
+
+// ══════════════════════════════════════════════════════════
+// UI Toggle
+// ══════════════════════════════════════════════════════════
+function toggleUI() {
+  if (state.uiMode === 'always') return;
+  state.uiVisible = !state.uiVisible;
+  headerEl.classList.toggle('hidden', !state.uiVisible);
+  footerEl.classList.toggle('hidden', !state.uiVisible);
+}
+function applyChip(attr, val) {
+  document.querySelectorAll(`[${attr}]`).forEach(el => el.classList.toggle('active', el.dataset[attr.replace('data-','')] === val));
+}
+
+// ══════════════════════════════════════════════════════════
+// Chapter index view
+// ══════════════════════════════════════════════════════════
+function showIndex() {
+  if (state.manifest?.title) $('index-title').textContent = state.manifest.title;
+  $('index-subtitle').textContent = `${state.chapters.length} chapters`;
+  buildChList(); showView('index');
+}
+function buildChList() {
+  $('ch-list').innerHTML = state.chapters.map((ch, i) => {
     const read = state.readSet.has(String(i));
     return `<div class="ch-item${i === state.currentChIdx ? ' current' : ''}" data-idx="${i}">
       <span class="ch-num">${ch.chapter}</span>
       <span class="ch-title-text">${ch.title}</span>
-      <span class="ch-pages">${ch.pages.length}p</span>
-      <span class="ch-read-dot${read ? ' read' : ''}"></span>
+      <span class="ch-pages-count">${ch.pages.length}p</span>
+      <span class="ch-dot${read ? ' read' : ''}"></span>
     </div>`;
   }).join('');
-  chList.querySelectorAll('.ch-item').forEach(el => {
-    el.addEventListener('click', () => {
-      const idx = parseInt(el.dataset.idx);
-      closeIndex();
-      loadChapter(idx, 0);
+  $('ch-list').querySelectorAll('.ch-item').forEach(el =>
+    el.addEventListener('click', () => { showView('reader'); loadChapter(parseInt(el.dataset.idx), 0); })
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// ── SEARCH / ADD MANGA ────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+// ── MangaDex API helpers ──────────────────────────────────
+async function mdexGet(path, params = {}) {
+  const url = new URL(MDEX + path);
+  Object.entries(params).forEach(([k, v]) => {
+    if (Array.isArray(v)) v.forEach(x => url.searchParams.append(k, x));
+    else url.searchParams.set(k, v);
+  });
+  const r = await fetch(url.toString(), { headers: { 'User-Agent': 'MangaPWA/1.0' } });
+  if (!r.ok) throw new Error(`MangaDex API ${r.status}: ${path}`);
+  return r.json();
+}
+
+function coverUrl(mangaId, fileName, size = 256) {
+  return `https://uploads.mangadex.org/covers/${mangaId}/${fileName}.${size}.jpg`;
+}
+
+function getLangName(code) {
+  const map = { vi: '🇻🇳 Tiếng Việt', en: '🇺🇸 English', ja: '🇯🇵 Japanese', 'ja-ro': '🇯🇵 Romaji', zh: '🇨🇳 中文', ko: '🇰🇷 한국어', fr: '🇫🇷 French', es: '🇪🇸 Spanish', pt: '🇧🇷 Portuguese', id: '🇮🇩 Indonesian', th: '🇹🇭 Thai' };
+  return map[code] || code.toUpperCase();
+}
+
+async function searchManga(query) {
+  const data = await mdexGet('/manga', {
+    title: query, limit: 10,
+    'includes[]': ['cover_art'],
+    'order[relevance]': 'desc',
+  });
+  return data.data || [];
+}
+
+async function getMangaLangs(mangaId) {
+  // Get available translated languages + chapter counts
+  const data = await mdexGet(`/manga/${mangaId}/aggregate`);
+  const volumes = data.volumes || {};
+  const langCounts = {};
+  // aggregate doesn't return lang info by itself; do a quick feed check
+  return null; // will use /manga/feed approach below
+}
+
+async function getMangaFeedLangs(mangaId) {
+  // Get unique languages available + chapter count per lang
+  const data = await mdexGet(`/manga/${mangaId}/feed`, {
+    limit: 1, 'order[chapter]': 'asc',
+    'includes[]': [],
+  });
+  // Use aggregate endpoint for per-lang counts
+  const aggData = await mdexGet(`/manga/${mangaId}/aggregate`);
+  // Fetch available langs via a 500-limit call
+  const feedAll = await mdexGet(`/manga/${mangaId}/feed`, { limit: 500, 'order[chapter]': 'asc', 'includes[]': [] });
+  const langMap = {};
+  (feedAll.data || []).forEach(ch => {
+    const lang = ch.attributes.translatedLanguage;
+    if (!langMap[lang]) langMap[lang] = new Set();
+    langMap[lang].add(ch.attributes.chapter);
+  });
+  return Object.fromEntries(Object.entries(langMap).map(([k, v]) => [k, v.size]));
+}
+
+// ── Render search results ─────────────────────────────────
+function renderSearchResults(mangas) {
+  const container = $('search-results');
+  if (!mangas.length) { container.innerHTML = '<div style="color:var(--muted);text-align:center;margin-top:32px;font-size:13px">Không tìm thấy truyện nào</div>'; return; }
+
+  container.innerHTML = mangas.map((m, i) => {
+    const attr = m.attributes;
+    const title = attr.title?.en || attr.title?.ja || Object.values(attr.title||{})[0] || 'Unknown';
+    const desc = (attr.description?.vi || attr.description?.en || '').slice(0, 80).replace(/<[^>]+>/g, '');
+    const status = attr.status || '';
+    const coverRel = m.relationships?.find(r => r.type === 'cover_art');
+    const coverFile = coverRel?.attributes?.fileName;
+    const thumb = coverFile ? coverUrl(m.id, coverFile, 256) : '';
+    const year = attr.year ? ` · ${attr.year}` : '';
+    return `<div class="manga-card" data-idx="${i}" data-id="${m.id}">
+      ${thumb ? `<img class="manga-thumb" src="${thumb}" alt="" loading="lazy" onerror="this.style.display='none'">` : '<div class="manga-thumb"></div>'}
+      <div class="manga-info">
+        <div class="manga-title">${title}</div>
+        <div class="manga-meta">${status}${year}</div>
+        ${desc ? `<div class="manga-meta" style="margin-top:2px;line-height:1.4">${desc}...</div>` : ''}
+        <div class="manga-tags">
+          <span class="manga-tag status-${status}">${status === 'ongoing' ? '🟢 Đang ra' : status === 'completed' ? '✅ Hoàn thành' : status}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  container.querySelectorAll('.manga-card').forEach(card => {
+    card.addEventListener('click', () => selectManga(mangas[parseInt(card.dataset.idx)], card));
+  });
+}
+
+async function selectManga(manga, cardEl) {
+  // Highlight
+  document.querySelectorAll('.manga-card').forEach(c => c.classList.remove('selected'));
+  cardEl.classList.add('selected');
+
+  state.selectedManga = manga;
+  const attr = manga.attributes;
+  const title = attr.title?.en || attr.title?.ja || Object.values(attr.title||{})[0] || 'Unknown';
+
+  const fc = $('fetch-config');
+  fc.classList.add('show');
+  $('fetch-manga-title').textContent = title;
+  $('fetch-manga-meta').textContent = 'Đang tải danh sách ngôn ngữ...';
+  $('lang-chips').innerHTML = '';
+  $('ch-count-badge').textContent = '';
+  $('btn-do-fetch').disabled = true;
+
+  // Scroll config into view
+  fc.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const langCounts = await getMangaFeedLangs(manga.id);
+    state.selectedMangaLangs = Object.keys(langCounts);
+    state.selectedMangaChCount = langCounts;
+
+    $('fetch-manga-meta').textContent = `${state.selectedMangaLangs.length} ngôn ngữ có sẵn`;
+
+    // Prefer vi > en > first
+    const preferred = ['vi', 'en', ...state.selectedMangaLangs].find(l => langCounts[l]) || state.selectedMangaLangs[0];
+    state.selectedLang = preferred;
+
+    $('lang-chips').innerHTML = state.selectedMangaLangs.map(lang =>
+      `<span class="lang-chip${lang === preferred ? ' active' : ''}" data-lang="${lang}">${getLangName(lang)} <span style="color:var(--muted);font-size:10px">(${langCounts[lang]}ch)</span></span>`
+    ).join('');
+
+    $('lang-chips').querySelectorAll('.lang-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.lang-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        state.selectedLang = chip.dataset.lang;
+        $('ch-count-badge').textContent = `— ${langCounts[state.selectedLang] || 0} chapters`;
+      });
     });
+
+    $('ch-count-badge').textContent = `— ${langCounts[preferred] || 0} chapters`;
+    $('btn-do-fetch').disabled = false;
+
+    // Pre-fill saved token
+    const savedToken = sessionStorage.getItem('gh_token') || '';
+    if (savedToken) $('gh-token-input').value = savedToken;
+
+  } catch(e) {
+    $('fetch-manga-meta').textContent = '❌ Không lấy được thông tin: ' + e.message;
+  }
+}
+
+// ── Trigger GitHub Actions ────────────────────────────────
+async function ghApi(token, method, path, body) {
+  const r = await fetch(`https://api.github.com${path}`, {
+    method, headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
+  if (method === 'POST' && r.status === 204) return null;
+  if (!r.ok) { const t = await r.text(); throw new Error(`GitHub API ${r.status}: ${t}`); }
+  return r.json();
 }
 
-// ─── Chapter loading ──────────────────────────────────────────────
-async function loadChapter(idx, startPage = 0) {
-  if (idx < 0 || idx >= state.chapters.length) return;
-  state.currentChIdx = idx;
-  state.currentPage = 0;
-
-  const ch = state.chapters[idx];
-  state.pages = ch.pages;
-
-  chapterSelect.value = idx;
-  showLoading(`Đang tải chapter ${ch.chapter}...`);
-
-  // preload first image to confirm path works
-  const chDir = `chapters/${ch.dir}`;
-  const firstImg = `${chDir}/${ch.pages[0]}`;
-  await new Promise((resolve) => {
-    const img = new Image();
-    img.onload = resolve;
-    img.onerror = () => {
-      showError(`Không tìm thấy ảnh`, `Path: ${firstImg}\n\nBạn chưa download chapter này.\nChạy lại script với --start ${ch.chapter} --end ${ch.chapter}`);
-      resolve();
-    };
-    img.src = firstImg;
-  });
-
-  if (empty.classList.contains('show') && emptyTitle.textContent.startsWith('⚠')) return;
-
-  hideEmpty();
-  updateNav();
-
-  if (state.mode === 'webtoon') {
-    renderWebtoon(chDir);
-  } else {
-    renderSingle(chDir, startPage);
-  }
-
-  state.readSet.add(String(idx));
-  saveState();
-  buildIndexList();
+function setFetchProgress(pct, text, log) {
+  const wrap = $('fetch-status-wrap'); wrap.classList.add('show');
+  $('fetch-bar-fill').style.width = pct + '%';
+  $('fetch-status-text').textContent = text;
+  if (log) { const el = $('fetch-log'); el.textContent += log + '\n'; el.scrollTop = el.scrollHeight; }
 }
 
-function chDir() {
-  return `chapters/${state.chapters[state.currentChIdx].dir}`;
-}
+async function doFetch() {
+  const manga = state.selectedManga;
+  if (!manga) return;
+  const token = $('gh-token-input').value.trim();
+  if (!token) { alert('Nhập GitHub Token để trigger Actions.'); return; }
+  sessionStorage.setItem('gh_token', token);
 
-// ─── Single page mode ─────────────────────────────────────────────
-function renderSingle(dir, startPage = 0) {
-  stripContainer.classList.remove('active');
-  pageContainer.classList.remove('hidden');
-  reader.classList.remove('webtoon');
-  goToPage(startPage, dir);
-}
+  const lang = state.selectedLang;
+  const start = $('fetch-start').value.trim() || '';
+  const end = $('fetch-end').value.trim() || '';
+  const attr = manga.attributes;
+  const title = attr.title?.vi || attr.title?.en || attr.title?.ja || Object.values(attr.title||{})[0] || 'Manga';
 
-function goToPage(idx, dir) {
-  dir = dir || chDir();
-  const pages = state.pages;
-  idx = Math.max(0, Math.min(idx, pages.length - 1));
-  state.currentPage = idx;
+  $('btn-do-fetch').disabled = true;
+  $('fetch-log').textContent = '';
+  setFetchProgress(5, '🚀 Đang trigger GitHub Actions...', `Manga: ${title} [${manga.id}]`);
+  setFetchProgress(5, '', `Ngôn ngữ: ${lang}, Ch: ${start||'1'} → ${end||'cuối'}`);
 
-  pageImg.classList.add('loading');
-  pageImg.onload = () => pageImg.classList.remove('loading');
-  pageImg.src = `${dir}/${pages[idx]}`;
+  try {
+    // Trigger fetch workflow
+    await ghApi(token, 'POST', `/repos/${GH_REPO}/actions/workflows/${GH_WORKFLOW_FETCH}/dispatches`, {
+      ref: 'main',
+      inputs: {
+        manga_id: manga.id,
+        lang: lang,
+        start_chapter: start,
+        end_chapter: end,
+        manga_title: title,
+      }
+    });
+    setFetchProgress(15, '✅ Triggered! Đang chờ workflow chạy...', 'fetch.yml dispatched');
 
-  updateProgress();
-  updateNav();
-  saveState();
+    // Poll for run completion
+    await new Promise(r => setTimeout(r, 6000));
+    let runId = null, attempts = 0;
+    while (!runId && attempts < 20) {
+      const runs = await ghApi(token, 'GET', `/repos/${GH_REPO}/actions/runs?per_page=5`);
+      const freshRun = runs.workflow_runs?.find(r => r.name === 'Fetch Manga Chapters' && (r.status === 'queued' || r.status === 'in_progress'));
+      if (freshRun) { runId = freshRun.id; setFetchProgress(20, `Run #${runId} đang chạy...`, `Run ID: ${runId}`); }
+      else { attempts++; await new Promise(r => setTimeout(r, 3000)); }
+    }
+    if (!runId) throw new Error('Không tìm thấy run. Kiểm tra GitHub Actions.');
 
-  // preload next
-  if (idx + 1 < pages.length) {
-    new Image().src = `${dir}/${pages[idx + 1]}`;
-  }
-}
+    // Poll run until complete
+    let done = false, pct = 20;
+    while (!done) {
+      await new Promise(r => setTimeout(r, 8000));
+      const run = await ghApi(token, 'GET', `/repos/${GH_REPO}/actions/runs/${runId}`);
+      pct = Math.min(pct + 5, 75);
+      setFetchProgress(pct, `Fetch: ${run.status}...`, `status: ${run.status}`);
+      if (run.status === 'completed') {
+        done = true;
+        if (run.conclusion !== 'success') throw new Error(`Fetch failed: ${run.conclusion}. Xem log: ${run.html_url}`);
+        setFetchProgress(80, '✅ Fetch xong! Đang trigger deploy...', `conclusion: ${run.conclusion}`);
+      }
+    }
 
-// ─── Webtoon strip mode ───────────────────────────────────────────
-function renderWebtoon(dir) {
-  pageContainer.classList.add('hidden');
-  stripContainer.classList.add('active');
-  reader.classList.add('webtoon');
+    // Trigger deploy
+    await ghApi(token, 'POST', `/repos/${GH_REPO}/actions/workflows/${GH_WORKFLOW_DEPLOY}/dispatches`, { ref: 'main' });
+    setFetchProgress(85, 'Deploy đang chạy...', 'deploy.yml dispatched');
+    await new Promise(r => setTimeout(r, 5000));
 
-  stripContainer.innerHTML = state.pages.map((p, i) =>
-    `<img src="${dir}/${p}" alt="page ${i+1}" loading="lazy">`
-  ).join('');
-
-  updateProgress();
-  updateNav();
-}
-
-// ─── Navigation ───────────────────────────────────────────────────
-function navigate(delta) {
-  if (state.mode === 'webtoon') return;
-  const effective = state.dir === 'rtl' ? -delta : delta;
-  const next = state.currentPage + effective;
-  if (next < 0) {
-    if (state.currentChIdx > 0) loadChapter(state.currentChIdx - 1, state.pages.length - 1);
-  } else if (next >= state.pages.length) {
-    if (state.currentChIdx < state.chapters.length - 1) loadChapter(state.currentChIdx + 1, 0);
-  } else {
-    goToPage(next);
+    // Poll deploy
+    let deployDone = false, dpct = 85;
+    while (!deployDone) {
+      await new Promise(r => setTimeout(r, 8000));
+      const runs = await ghApi(token, 'GET', `/repos/${GH_REPO}/actions/runs?per_page=5`);
+      const depRun = runs.workflow_runs?.find(r => r.name === 'Deploy Manga PWA to GitHub Pages' && (r.status === 'queued' || r.status === 'in_progress' || r.status === 'completed'));
+      if (depRun) {
+        dpct = Math.min(dpct + 3, 98);
+        setFetchProgress(dpct, `Deploy: ${depRun.status}...`, `deploy: ${depRun.status}`);
+        if (depRun.status === 'completed') {
+          deployDone = true;
+          if (depRun.conclusion === 'success') {
+            setFetchProgress(100, '🎉 Hoàn tất! Reload để đọc.', 'deploy: success');
+            setTimeout(() => { if (confirm('✅ Đã fetch & deploy xong!\nReload để đọc truyện mới?')) location.reload(); }, 1000);
+          } else throw new Error(`Deploy failed: ${depRun.conclusion}`);
+        }
+      } else { dpct = Math.min(dpct + 2, 95); setFetchProgress(dpct, 'Deploy đang xử lý...'); }
+    }
+  } catch(e) {
+    setFetchProgress(0, '❌ Lỗi: ' + e.message, 'ERROR: ' + e.message);
+    $('btn-do-fetch').disabled = false;
   }
 }
 
-function updateNav() {
-  $('btn-prev-ch').disabled = state.currentChIdx <= 0;
-  $('btn-next-ch').disabled = state.currentChIdx >= state.chapters.length - 1;
-  const isWebtoon = state.mode === 'webtoon';
-  $('btn-prev-pg').disabled = isWebtoon || state.currentPage <= 0;
-  $('btn-next-pg').disabled = isWebtoon || state.currentPage >= state.pages.length - 1;
-}
-
-function updateProgress() {
-  const total = state.pages.length;
-  const cur = state.currentPage + 1;
-  const pct = total > 0 ? (cur / total) * 100 : 0;
-  progressFill.style.width = `${pct}%`;
-  pageInfo.textContent = `${cur}/${total}`;
-  pageLabel.textContent = `Trang ${cur} / ${total}`;
-}
-
-// ─── UI visibility ────────────────────────────────────────────────
-function toggleUI() {
-  if (state.uiMode === 'always') return;
-  state.uiVisible = !state.uiVisible;
-  if (state.uiVisible) {
-    header.classList.remove('hidden');
-    footer.classList.remove('hidden');
-  } else {
-    header.classList.add('hidden');
-    footer.classList.add('hidden');
-  }
-}
-
-// ─── Settings ─────────────────────────────────────────────────────
-function applyChip(attr, val) {
-  document.querySelectorAll(`[${attr}]`).forEach(el => {
-    el.classList.toggle('active', el.dataset[attr.replace('data-','')] === val);
-  });
-}
-
-document.querySelectorAll('[data-mode]').forEach(btn => btn.addEventListener('click', () => {
-  state.mode = btn.dataset.mode;
-  applyChip('data-mode', state.mode);
-  if (state.manifest) loadChapter(state.currentChIdx, state.currentPage);
-  saveState();
-}));
-document.querySelectorAll('[data-dir]').forEach(btn => btn.addEventListener('click', () => {
-  state.dir = btn.dataset.dir;
-  applyChip('data-dir', state.dir);
-  saveState();
-}));
-document.querySelectorAll('[data-ui]').forEach(btn => btn.addEventListener('click', () => {
-  state.uiMode = btn.dataset.ui;
-  applyChip('data-ui', state.uiMode);
-  if (state.uiMode === 'always') {
-    header.classList.remove('hidden');
-    footer.classList.remove('hidden');
-  }
-  saveState();
-}));
-
-$('btn-settings').addEventListener('click', () => settingsPanel.classList.add('open'));
-$('btn-close-settings').addEventListener('click', () => settingsPanel.classList.remove('open'));
-$('settings-overlay').addEventListener('click', () => settingsPanel.classList.remove('open'));
-$('btn-show-index').addEventListener('click', () => {
-  settingsPanel.classList.remove('open');
-  showIndex();
-});
-
-// ─── Index view ───────────────────────────────────────────────────
-function showIndex() {
-  indexView.classList.add('active');
-  reader.style.display = 'none';
-  footer.style.display = 'none';
-  buildIndexList();
-}
-function closeIndex() {
-  indexView.classList.remove('active');
-  reader.style.display = '';
-  footer.style.display = '';
-}
-
-// ─── Events ───────────────────────────────────────────────────────
-$('btn-prev-pg').addEventListener('click', () => navigate(-1));
-$('btn-next-pg').addEventListener('click', () => navigate(1));
-$('btn-prev-ch').addEventListener('click', () => loadChapter(state.currentChIdx - 1, 0));
-$('btn-next-ch').addEventListener('click', () => loadChapter(state.currentChIdx + 1, 0));
-chapterSelect.addEventListener('change', () => loadChapter(parseInt(chapterSelect.value), 0));
-
-$('tap-prev').addEventListener('click', () => navigate(-1));
-$('tap-next').addEventListener('click', () => navigate(1));
-$('tap-middle').addEventListener('click', toggleUI);
-
-progressTrack.addEventListener('click', e => {
-  if (state.mode === 'webtoon') return;
-  const rect = progressTrack.getBoundingClientRect();
-  const pct = (e.clientX - rect.left) / rect.width;
-  const page = Math.round(pct * (state.pages.length - 1));
-  goToPage(page);
-});
-
-// Keyboard
-reader.addEventListener('keydown', e => {
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); navigate(1); }
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); navigate(-1); }
-  if (e.key === 'f' || e.key === 'F') toggleUI();
-});
-reader.focus();
-
-// Touch swipe (single page mode)
-let touchX = null;
-reader.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
-reader.addEventListener('touchend', e => {
-  if (touchX === null || state.mode === 'webtoon') return;
-  const dx = e.changedTouches[0].clientX - touchX;
-  if (Math.abs(dx) > 60) navigate(dx < 0 ? 1 : -1);
-  touchX = null;
-}, { passive: true });
-
-// ─── Download helpers ─────────────────────────────────────────────
-function dlSetProgress(pct, msg) {
-  const wrap = $('dl-progress-wrap');
-  wrap.classList.add('show');
-  $('dl-bar-fill').style.width = pct + '%';
-  $('dl-status').textContent = msg;
-}
-function dlHideProgress() {
-  $('dl-progress-wrap').classList.remove('show');
-  $('dl-bar-fill').style.width = '0%';
-}
-function dlSetBtns(disabled) {
-  $('btn-dl-cbz').disabled = disabled;
-  $('btn-dl-pdf').disabled = disabled;
-}
-
-async function fetchImageAsBlob(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
-  return r.blob();
-}
-
-async function fetchImageAsDataUrl(url) {
-  const blob = await fetchImageAsBlob(url);
-  return new Promise((res, rej) => {
-    const fr = new FileReader();
-    fr.onload = () => res(fr.result);
-    fr.onerror = rej;
-    fr.readAsDataURL(blob);
-  });
-}
+// ══════════════════════════════════════════════════════════
+// Download (CBZ / PDF)
+// ══════════════════════════════════════════════════════════
+function dlProg(pct, msg) { $('dl-progress-wrap').classList.add('show'); $('dl-bar-fill').style.width = pct + '%'; $('dl-status').textContent = msg; }
+function dlHide() { setTimeout(() => { $('dl-progress-wrap').classList.remove('show'); $('dl-bar-fill').style.width = '0%'; }, 3000); }
+function dlLock(v) { $('btn-dl-cbz').disabled = v; $('btn-dl-pdf').disabled = v; }
+async function imgBlob(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status}: ${url}`); return r.blob(); }
+async function imgDataUrl(url) { const b = await imgBlob(url); return new Promise((res,rej) => { const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(b); }); }
 
 async function downloadCBZ() {
-  const ch = state.chapters[state.currentChIdx];
-  if (!ch) return;
+  const ch = state.chapters[state.currentChIdx]; if (!ch) return;
   const dir = `chapters/${ch.dir}`;
-  const fname = `Nippon-Sangoku-Ch${ch.chapter}.cbz`;
-
-  dlSetBtns(true);
-  dlSetProgress(0, 'Đang tạo CBZ...');
-
+  const fname = `${(state.manifest?.title||'Manga').replace(/\s+/g,'-')}-Ch${ch.chapter}.cbz`;
+  dlLock(true); dlProg(0, 'Đang tạo CBZ...');
   try {
     const zip = new JSZip();
     for (let i = 0; i < ch.pages.length; i++) {
-      const url = `${dir}/${ch.pages[i]}`;
-      dlSetProgress(Math.round((i / ch.pages.length) * 90), `Trang ${i+1}/${ch.pages.length}`);
-      const blob = await fetchImageAsBlob(url);
-      zip.file(ch.pages[i], blob);
+      dlProg(Math.round((i/ch.pages.length)*90), `Trang ${i+1}/${ch.pages.length}`);
+      zip.file(ch.pages[i], await imgBlob(`${dir}/${ch.pages[i]}`));
     }
-    dlSetProgress(95, 'Nén file...');
-    const content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } });
-    dlSetProgress(100, 'Xong!');
-
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(content);
-    a.download = fname;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  } catch(e) {
-    dlSetProgress(0, '❌ Lỗi: ' + e.message);
-  } finally {
-    dlSetBtns(false);
-    setTimeout(dlHideProgress, 3000);
-  }
+    dlProg(95,'Nén...'); const blob = await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:1}});
+    dlProg(100,'Xong!'); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fname; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  } catch(e) { dlProg(0,'❌ '+e.message); } finally { dlLock(false); dlHide(); }
 }
 
 async function downloadPDF() {
-  const ch = state.chapters[state.currentChIdx];
-  if (!ch) return;
+  const ch = state.chapters[state.currentChIdx]; if (!ch) return;
   const dir = `chapters/${ch.dir}`;
-  const fname = `Nippon-Sangoku-Ch${ch.chapter}.pdf`;
-
-  dlSetBtns(true);
-  dlSetProgress(0, 'Đang tạo PDF...');
-
+  const fname = `${(state.manifest?.title||'Manga').replace(/\s+/g,'-')}-Ch${ch.chapter}.pdf`;
+  dlLock(true); dlProg(0,'Đang tạo PDF...');
   try {
-    const { jsPDF } = window.jspdf;
-
-    // Load first image to get dimensions
-    dlSetProgress(5, 'Tải trang 1...');
-    const firstDataUrl = await fetchImageAsDataUrl(`${dir}/${ch.pages[0]}`);
-    const img0 = new Image();
-    await new Promise(r => { img0.onload = r; img0.src = firstDataUrl; });
-
-    const pW = img0.naturalWidth;
-    const pH = img0.naturalHeight;
-    const pdf = new jsPDF({
-      orientation: pW > pH ? 'l' : 'p',
-      unit: 'px',
-      format: [pW, pH],
-      hotfixes: ['px_scaling'],
-    });
-
-    for (let i = 0; i < ch.pages.length; i++) {
-      dlSetProgress(5 + Math.round((i / ch.pages.length) * 90), `Trang ${i+1}/${ch.pages.length}`);
-      const dataUrl = i === 0 ? firstDataUrl : await fetchImageAsDataUrl(`${dir}/${ch.pages[i]}`);
-      const img = new Image();
-      await new Promise(r => { img.onload = r; img.src = dataUrl; });
-      const iW = img.naturalWidth, iH = img.naturalHeight;
-
-      if (i > 0) pdf.addPage([iW, iH], iW > iH ? 'l' : 'p');
-      pdf.addImage(dataUrl, 'JPEG', 0, 0, iW, iH, '', 'FAST');
+    const {jsPDF} = window.jspdf;
+    dlProg(5,'Tải trang 1...'); const first = await imgDataUrl(`${dir}/${ch.pages[0]}`);
+    const img0=new Image(); await new Promise(r=>{img0.onload=r;img0.src=first;});
+    const pW=img0.naturalWidth, pH=img0.naturalHeight;
+    const pdf=new jsPDF({orientation:pW>pH?'l':'p',unit:'px',format:[pW,pH],hotfixes:['px_scaling']});
+    for(let i=0;i<ch.pages.length;i++){
+      dlProg(5+Math.round((i/ch.pages.length)*90),`Trang ${i+1}/${ch.pages.length}`);
+      const du=i===0?first:await imgDataUrl(`${dir}/${ch.pages[i]}`);
+      const im=new Image(); await new Promise(r=>{im.onload=r;im.src=du;});
+      if(i>0) pdf.addPage([im.naturalWidth,im.naturalHeight],im.naturalWidth>im.naturalHeight?'l':'p');
+      pdf.addImage(du,'JPEG',0,0,im.naturalWidth,im.naturalHeight,'','FAST');
     }
-
-    dlSetProgress(98, 'Xuất PDF...');
-    pdf.save(fname);
-    dlSetProgress(100, 'Xong!');
-  } catch(e) {
-    dlSetProgress(0, '❌ Lỗi: ' + e.message);
-    console.error(e);
-  } finally {
-    dlSetBtns(false);
-    setTimeout(dlHideProgress, 3000);
-  }
+    dlProg(98,'Xuất...'); pdf.save(fname); dlProg(100,'Xong!');
+  } catch(e) { dlProg(0,'❌ '+e.message); console.error(e); } finally { dlLock(false); dlHide(); }
 }
 
+// ══════════════════════════════════════════════════════════
+// Event bindings
+// ══════════════════════════════════════════════════════════
+
+// Header
+$('logo').addEventListener('click', () => showView('reader'));
+$('btn-add-manga').addEventListener('click', () => { showView('search'); $('fetch-config').classList.remove('show'); });
+$('btn-settings').addEventListener('click', () => $('settings-panel').classList.add('open'));
+
+// Index view
+$('index-back').addEventListener('click', () => showView('reader'));
+
+// Settings panel
+$('settings-overlay').addEventListener('click', () => $('settings-panel').classList.remove('open'));
+$('btn-close-settings').addEventListener('click', () => $('settings-panel').classList.remove('open'));
+$('btn-show-index').addEventListener('click', () => { $('settings-panel').classList.remove('open'); showIndex(); });
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { state.mode=b.dataset.mode; applyChip('data-mode',state.mode); if(state.manifest) loadChapter(state.currentChIdx,state.currentPage); saveState(); }));
+document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { state.dir=b.dataset.dir; applyChip('data-dir',state.dir); saveState(); }));
+document.querySelectorAll('[data-ui]').forEach(b => b.addEventListener('click', () => { state.uiMode=b.dataset.ui; applyChip('data-ui',state.uiMode); if(state.uiMode==='always'){headerEl.classList.remove('hidden');footerEl.classList.remove('hidden');} saveState(); }));
 $('btn-dl-cbz').addEventListener('click', downloadCBZ);
 $('btn-dl-pdf').addEventListener('click', downloadPDF);
 
-// ─── Service Worker ───────────────────────────────────────────────
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
-}
+// Reader controls
+$('btn-prev-pg').addEventListener('click', () => navigate(-1));
+$('btn-next-pg').addEventListener('click', () => navigate(1));
+$('btn-prev-ch').addEventListener('click', () => loadChapter(state.currentChIdx-1,0));
+$('btn-next-ch').addEventListener('click', () => loadChapter(state.currentChIdx+1,0));
+$('chapter-select').addEventListener('change', () => loadChapter(parseInt($('chapter-select').value),0));
+$('tap-prev').addEventListener('click', () => navigate(-1));
+$('tap-next').addEventListener('click', () => navigate(1));
+$('tap-middle').addEventListener('click', toggleUI);
+progressTrack.addEventListener('click', e => {
+  if(state.mode==='webtoon') return;
+  const rect=progressTrack.getBoundingClientRect(), pct=(e.clientX-rect.left)/rect.width;
+  goToPage(Math.round(pct*(state.pages.length-1)));
+});
+$('reader').addEventListener('keydown', e => {
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();navigate(1);}
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();navigate(-1);}
+  if(e.key==='f'||e.key==='F') toggleUI();
+});
+$('reader').focus();
+let tx=null;
+$('reader').addEventListener('touchstart',e=>{tx=e.touches[0].clientX;},{passive:true});
+$('reader').addEventListener('touchend',e=>{if(tx===null||state.mode==='webtoon')return;const dx=e.changedTouches[0].clientX-tx;if(Math.abs(dx)>60)navigate(dx<0?1:-1);tx=null;},{passive:true});
 
-// ─── Bootstrap ───────────────────────────────────────────────────
+// Search
+$('btn-search').addEventListener('click', async () => {
+  const q = $('search-input').value.trim();
+  if (!q) return;
+  $('btn-search').disabled = true;
+  $('btn-search').textContent = '...';
+  $('search-results').innerHTML = '<div style="color:var(--muted);text-align:center;margin-top:32px"><div class="spinner" style="margin:0 auto"></div></div>';
+  $('fetch-config').classList.remove('show');
+  try {
+    const results = await searchManga(q);
+    state.searchResults = results;
+    renderSearchResults(results);
+  } catch(e) {
+    $('search-results').innerHTML = `<div style="color:var(--muted);text-align:center;margin-top:20px">❌ ${e.message}</div>`;
+  } finally {
+    $('btn-search').disabled = false;
+    $('btn-search').textContent = 'Tìm';
+  }
+});
+$('search-input').addEventListener('keydown', e => { if(e.key==='Enter') $('btn-search').click(); });
+$('btn-do-fetch').addEventListener('click', doFetch);
+
+// ── Update fetch.yml to accept manga_title input ──────────
+
+// SW
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+
+// Boot
 loadManifest();
 </script>
 </body>
