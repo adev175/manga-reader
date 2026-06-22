@@ -1,1 +1,52 @@
-{"query":"","results":[]}
+{
+  "query": "Hoả Phụng Liêu Nguyên",
+  "results": [
+    {
+      "id": "f6ce20ca-73c3-4fdd-9367-e2901fca780e",
+      "title": "Huǒfèng Liáoyuán",
+      "title_vi": "",
+      "desc": "Truyện kể về thời kỳ Tam quốc tranh bá nổi tiếng trong lịch sử Trung Quốc. Điểm đặc biệt ở đây là nhân vật trung tâm của truyện không phải là Tào Tháo, Lưu Bị hay Tôn Quyền như ta thường thấy ở các bộ",
+      "status": "ongoing",
+      "year": 2001,
+      "cover": "fed093aa-cbcf-4ca0-b80c-49eb251b1e80.png",
+      "author": "Chen Mou",
+      "tags": [
+        "Historical",
+        "Action",
+        "Psychological",
+        "Romance"
+      ],
+      "langs": {
+        "pt-br": 82,
+        "it": 9,
+        "ru": 81,
+        "vi": 81,
+        "tr": 15,
+        "en": 81,
+        "es": 27,
+        "fr": 34
+      }
+    },
+    {
+      "id": "646741db-9062-41ca-8039-c87867ab895c",
+      "title": "Akuyaku Reijou wa Slow Life wo Enjoy Shitai!",
+      "title_vi": "",
+      "desc": "Khoảnh khắc chờ đợi từ lâu để chấm dứt hôn ước cuối cùng đã đến...\" \"Ta tuyên bố  hủy bỏ hôn ước với cô!\" Tại lễ tốt nghiệp của học viện, Silvia, nữ phản diện, được thái tử tuyên bố hủy bỏ hôn ước. Cô",
+      "status": "ongoing",
+      "year": 2024,
+      "cover": "06264657-139a-43da-b27d-5939ddf298dd.jpg",
+      "author": "Amamiya Ren",
+      "tags": [
+        "Monsters",
+        "Romance",
+        "Comedy",
+        "Magic"
+      ],
+      "langs": {
+        "en": 24,
+        "id": 7,
+        "vi": 5
+      }
+    }
+  ]
+}
