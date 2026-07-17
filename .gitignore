@@ -7,6 +7,8 @@ __pycache__/
 # Bỏ comment dòng dưới nếu KHÔNG muốn commit ảnh lên GitHub:
 # docs/chapters/
 
-# OS
-.DS_Store
-Thumbs.db
+# Custom ignores
+downloads/
+scratch/
+cookies.json
+

@@ -54,7 +54,7 @@ def scan(docs_dir: Path, title: str):
 
     manifest = {"title": title, "chapters": chapters}
     out = docs_dir / "manifest.json"
-    out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nWrote {out} — {len(chapters)} chapters total")
 
 if __name__ == "__main__":
