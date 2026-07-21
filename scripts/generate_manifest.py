@@ -25,7 +25,7 @@ def scan(docs_dir: Path, title: str):
 
         meta_file = d / "meta.json"
         if meta_file.exists():
-            meta = json.loads(meta_file.read_text())
+            meta = json.loads(meta_file.read_text(encoding="utf-8"))
             ch_num = meta.get("chapter", d.name)
             ch_title = meta.get("title", f"Chapter {ch_num}")
             pages = meta.get("pages", [])

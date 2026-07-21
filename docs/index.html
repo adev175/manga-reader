@@ -30,9 +30,8 @@ header.hidden{transform:translateY(-100%)}
 #logo{font-weight:700;font-size:15px;color:var(--accent);letter-spacing:.04em;flex-shrink:0;cursor:pointer}
 #chapter-select{flex:1;min-width:0;font-size:13px;padding:4px 8px}
 #page-info{font-size:12px;color:var(--muted);white-space:nowrap;min-width:52px;text-align:right}
-#btn-add-manga{font-size:18px;padding:4px 6px;border-radius:var(--r);color:var(--muted);transition:color .15s}
-#btn-add-manga:hover{color:var(--accent)}
-#btn-settings{font-size:18px;padding:4px 6px;border-radius:var(--r);color:var(--muted);transition:color .15s}
+#btn-index,#btn-add-manga,#btn-settings{font-size:18px;padding:4px 6px;border-radius:var(--r);color:var(--muted);transition:color .15s}
+#btn-index:hover,#btn-add-manga:hover{color:var(--accent)}
 #btn-settings:hover{color:var(--text)}
 
 /* ── Reader ── */
@@ -169,11 +168,11 @@ footer.hidden{transform:translateY(100%)}
 <body>
 <div id="app">
 
-  <!-- Header -->
   <header id="header">
     <span id="logo" title="Thư viện">📖</span>
     <select id="chapter-select"></select>
     <span id="page-info">—</span>
+    <button id="btn-index" title="Danh sách chương">☰</button>
     <button id="btn-add-manga" title="Thêm truyện">＋</button>
     <button id="btn-settings" title="Cài đặt">⚙</button>
   </header>
@@ -778,7 +777,8 @@ async function downloadPDF() {
 // ══════════════════════════════════════════════════════════
 
 // Header
-$('logo').addEventListener('click', () => showView('reader'));
+$('logo').addEventListener('click', () => { if (views.index.classList.contains('active')) showView('reader'); else showIndex(); });
+$('btn-index').addEventListener('click', () => { if (views.index.classList.contains('active')) showView('reader'); else showIndex(); });
 $('btn-add-manga').addEventListener('click', () => { showView('search'); $('fetch-config').classList.remove('show'); });
 $('btn-settings').addEventListener('click', () => $('settings-panel').classList.add('open'));
 
