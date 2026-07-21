@@ -137,16 +137,12 @@ def download_chapter(chapter: dict, out_dir: Path) -> list:
     meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
     return pages
 
-def build_manifest(manga_info: dict, out_dir: Path, chapters_meta: list):
-    attr = manga_info["attributes"]
-    title = attr.get("title", {}).get("en") or next(iter(attr.get("title", {}).values()), "Manga")
-
-    manifest = {
-        "title": title,
-        "chapters": chapters_meta
-    }
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
-    print(f"  Wrote manifest.json with {len(chapters_meta)} chapters")
+def slugify(text: str) -> str:
+    import unicodedata
+    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+    text = re.sub(r'[^\w\s-]', '', text).strip().lower()
+    text = re.sub(r'[-\s]+', '-', text)
+    return text
 
 def main():
     ap = argparse.ArgumentParser(description="Download MangaDex manga for PWA")
@@ -158,14 +154,21 @@ def main():
     args = ap.parse_args()
 
     manga_id = parse_manga_id(args.url)
-    out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[1/3] Fetching manga info: {manga_id}")
     manga_info = get_manga_info(manga_id)
     attr = manga_info["attributes"]
     title = attr.get("title", {}).get("en") or next(iter(attr.get("title", {}).values()), "Manga")
     print(f"  Title: {title}")
+
+    # Slugify title and append to output directory
+    manga_slug = slugify(title)
+    out_dir = Path(args.out) / manga_slug
+    out_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save manga.json for metadata scanning
+    with open(out_dir / "manga.json", "w", encoding="utf-8") as f:
+        json.dump({"title": title}, f, ensure_ascii=False, indent=2)
 
     print(f"[2/3] Fetching chapter list (lang={args.lang}) ...")
     chapters = get_chapters(manga_id, args.lang, args.start, args.end)
@@ -175,22 +178,22 @@ def main():
         print("No chapters found. Try --lang en")
         sys.exit(1)
 
-    chapters_meta = []
     print(f"[3/3] Downloading {len(chapters)} chapters to {out_dir}")
     for ch in chapters:
         ch_num = ch["attributes"]["chapter"]
         ch_title = ch["attributes"].get("title") or f"Chapter {ch_num}"
         print(f"  Downloading Chapter {ch_num}: {ch_title}")
-        pages = download_chapter(ch, out_dir)
-        chapters_meta.append({
-            "chapter": ch_num,
-            "title": ch_title,
-            "dir": f"ch{ch_num.zfill(4)}",
-            "pages": pages
-        })
+        download_chapter(ch, out_dir)
         time.sleep(0.5)
 
-    build_manifest(manga_info, out_dir.parent, chapters_meta)
+    # Regenerate manifest using generate_manifest
+    print("\nRegenerating manifest...")
+    try:
+        from generate_manifest import scan as scan_manifest
+        scan_manifest(out_dir.parent.parent, title)
+    except Exception as e:
+        print(f"Error generating manifest: {e}")
+
     print("\nDone! Run: cd docs && python -m http.server 8080")
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8')
 
 SRC_DIR = os.path.join("downloads", "Hỏa Phụng Liêu Nguyên")
-DEST_DIR = os.path.join("docs", "chapters")
+DEST_DIR = os.path.join("docs", "chapters", "hoa-phung-lieu-nguyen")
 
 def clean_dest_dir():
     if os.path.exists(DEST_DIR):

@@ -181,6 +181,10 @@ footer.hidden{transform:translateY(100%)}
   <div id="index-view">
     <div id="index-back">← Quay lại đọc</div>
     <div id="index-title">Manga</div>
+    <div id="manga-select-wrap" style="margin:10px 0 16px; display:none;">
+      <label style="font-size:11px; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px; letter-spacing:.06em">Chọn truyện</label>
+      <select id="manga-select" style="padding: 6px 10px; width: 100%; font-size:14px"></select>
+    </div>
     <div id="index-subtitle"></div>
     <div class="ch-list" id="ch-list"></div>
   </div>
@@ -318,7 +322,7 @@ const MANGA_TITLE = 'Nippon Sangoku'; // default title for generate_manifest
 // State
 // ══════════════════════════════════════════════════════════
 const state = {
-  manifest: null, chapters: [], currentChIdx: 0, currentPage: 0, pages: [],
+  manifest: null, mangas: [], currentMangaId: '', chapters: [], currentChIdx: 0, currentPage: 0, pages: [],
   mode: 'single', dir: 'ltr', uiMode: 'auto', uiVisible: true,
   readSet: new Set(),
   // search
@@ -329,10 +333,27 @@ const state = {
 // Persist
 // ══════════════════════════════════════════════════════════
 function saveState() {
-  try { localStorage.setItem('mpwa', JSON.stringify({ chIdx: state.currentChIdx, page: state.currentPage, mode: state.mode, dir: state.dir, uiMode: state.uiMode, read: [...state.readSet] })); } catch {}
+  try {
+    const key = state.currentMangaId ? `mpwa_${state.currentMangaId}` : 'mpwa';
+    localStorage.setItem(key, JSON.stringify({ chIdx: state.currentChIdx, page: state.currentPage, mode: state.mode, dir: state.dir, uiMode: state.uiMode, read: [...state.readSet] }));
+    if (state.currentMangaId) localStorage.setItem('mpwa_manga_id', state.currentMangaId);
+  } catch {}
 }
 function loadSavedState() {
-  try { const d = JSON.parse(localStorage.getItem('mpwa') || '{}'); if (d.mode) state.mode = d.mode; if (d.dir) state.dir = d.dir; if (d.uiMode) state.uiMode = d.uiMode; if (d.read) d.read.forEach(v => state.readSet.add(v)); return { chIdx: d.chIdx ?? 0, page: d.page ?? 0 }; } catch { return { chIdx: 0, page: 0 }; }
+  try {
+    const mangaId = localStorage.getItem('mpwa_manga_id') || (state.mangas[0] ? state.mangas[0].id : '');
+    state.currentMangaId = mangaId;
+    const key = mangaId ? `mpwa_${mangaId}` : 'mpwa';
+    const d = JSON.parse(localStorage.getItem(key) || '{}');
+    if (d.mode) state.mode = d.mode;
+    if (d.dir) state.dir = d.dir;
+    if (d.uiMode) state.uiMode = d.uiMode;
+    state.readSet.clear();
+    if (d.read) d.read.forEach(v => state.readSet.add(v));
+    return { chIdx: d.chIdx ?? 0, page: d.page ?? 0 };
+  } catch {
+    return { chIdx: 0, page: 0 };
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -362,16 +383,38 @@ async function loadManifest() {
     const r = await fetch('./manifest.json?t=' + Date.now());
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     state.manifest = await r.json();
-    state.chapters = state.manifest.chapters || [];
-    if (!state.chapters.length) {
-      showEmpty('Chưa có truyện nào', 'Nhấn ＋ để tìm và thêm truyện từ MangaDex.', false);
-      showView('reader');
-      return;
+    
+    if (state.manifest.mangas) {
+      state.mangas = state.manifest.mangas;
+      const saved = loadSavedState();
+      const currentManga = state.mangas.find(m => m.id === state.currentMangaId) || state.mangas[0];
+      if (currentManga) {
+        state.currentMangaId = currentManga.id;
+        state.chapters = currentManga.chapters || [];
+      } else {
+        state.chapters = [];
+      }
+      initReaderUI();
+      if (state.chapters.length) {
+        const chIdx = Math.min(saved.chIdx, state.chapters.length - 1);
+        await loadChapter(chIdx, saved.page);
+      } else {
+        showEmpty('Chưa có chapter nào', '', false);
+      }
+    } else {
+      state.mangas = [];
+      state.currentMangaId = '';
+      state.chapters = state.manifest.chapters || [];
+      if (!state.chapters.length) {
+        showEmpty('Chưa có truyện nào', 'Nhấn ＋ để tìm và thêm truyện từ MangaDex.', false);
+        showView('reader');
+        return;
+      }
+      const saved = loadSavedState();
+      initReaderUI();
+      const chIdx = Math.min(saved.chIdx, state.chapters.length - 1);
+      await loadChapter(chIdx, saved.page);
     }
-    const saved = loadSavedState();
-    initReaderUI();
-    const chIdx = Math.min(saved.chIdx, state.chapters.length - 1);
-    await loadChapter(chIdx, saved.page);
     showView('reader');
   } catch(e) {
     showEmpty('Không tải được manifest.json', 'Nhấn ＋ để tìm và thêm truyện.', false, e.message);
@@ -380,12 +423,26 @@ async function loadManifest() {
 }
 
 function initReaderUI() {
-  if (state.manifest?.title) document.title = state.manifest.title + ' | Manga Reader';
+  let title = state.manifest?.title || 'Manga Reader';
+  if (state.currentMangaId) {
+    const currentManga = state.mangas.find(m => m.id === state.currentMangaId);
+    if (currentManga) title = currentManga.title;
+  }
+  document.title = title + ' | Manga Reader';
   $('chapter-select').innerHTML = state.chapters.map((ch, i) =>
     `<option value="${i}">Ch.${ch.chapter} ${ch.title}</option>`).join('');
   applyChip('data-mode', state.mode);
   applyChip('data-dir', state.dir);
   applyChip('data-ui', state.uiMode);
+  
+  if (state.mangas.length > 1) {
+    $('manga-select-wrap').style.display = 'block';
+    $('manga-select').innerHTML = state.mangas.map(m =>
+      `<option value="${m.id}" ${m.id === state.currentMangaId ? 'selected' : ''}>${m.title}</option>`
+    ).join('');
+  } else {
+    $('manga-select-wrap').style.display = 'none';
+  }
 }
 
 async function loadChapter(idx, startPage = 0) {
@@ -490,7 +547,12 @@ function applyChip(attr, val) {
 // Chapter index view
 // ══════════════════════════════════════════════════════════
 function showIndex() {
-  if (state.manifest?.title) $('index-title').textContent = state.manifest.title;
+  let title = state.manifest?.title || 'Manga';
+  if (state.currentMangaId) {
+    const currentManga = state.mangas.find(m => m.id === state.currentMangaId);
+    if (currentManga) title = currentManga.title;
+  }
+  $('index-title').textContent = title;
   $('index-subtitle').textContent = `${state.chapters.length} chapters`;
   buildChList(); showView('index');
 }
@@ -784,6 +846,20 @@ $('btn-settings').addEventListener('click', () => $('settings-panel').classList.
 
 // Index view
 $('index-back').addEventListener('click', () => showView('reader'));
+$('manga-select').addEventListener('change', async () => {
+  const selectedMangaId = $('manga-select').value;
+  state.currentMangaId = selectedMangaId;
+  localStorage.setItem('mpwa_manga_id', selectedMangaId);
+  const saved = loadSavedState();
+  const currentManga = state.mangas.find(m => m.id === selectedMangaId);
+  state.chapters = currentManga ? (currentManga.chapters || []) : [];
+  initReaderUI();
+  showIndex();
+  if (state.chapters.length) {
+    const chIdx = Math.min(saved.chIdx, state.chapters.length - 1);
+    await loadChapter(chIdx, saved.page);
+  }
+});
 
 // Settings panel
 $('settings-overlay').addEventListener('click', () => $('settings-panel').classList.remove('open'));
